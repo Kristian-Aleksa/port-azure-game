@@ -56,6 +56,15 @@ GitHub Desktop works too. Choose **File → Add local repository** and pick this
 
 From then on, every change you push to GitHub redeploys the site automatically.
 
+## Analytics
+
+The page includes Vercel Web Analytics (two small script tags at the end of the `<head>` in `src/index.html`). It counts visitors and page views on the deployed site. To see the numbers:
+
+1. In your Vercel project, open the **Analytics** tab and click **Enable** (if it isn't on yet).
+2. Visit your site. Data appears in the Analytics tab within a minute or so.
+
+Visitors with ad or content blockers aren't counted. When you run the game locally, the analytics script isn't found and nothing is tracked.
+
 ## Saves
 
 On a normal website, saves live in each player's browser (`localStorage`): an autosave at the end of every game day plus three manual slots. When the page runs inside Claude as an artifact, the same saves also sync to the player's private cloud slot. That code switches itself off everywhere else.
