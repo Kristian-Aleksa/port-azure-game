@@ -4,6 +4,7 @@
 const GAME_TITLE = 'Port Azur';
 const SAVE_PREFIX = 'portazur.v2.';
 const SAVE_VERSION = 2;
+const MAP_V = 2; // map generation version: 2 = tunnels at random spots along the back wall
 const SLOTS = ['auto', '1', '2', '3'];
 
 // Isometric geometry: 2:1 pixel-art diamonds, 16 model units per tile edge.
@@ -129,9 +130,9 @@ const B = {
   plaza: { cat: 'leisure', name: 'Fountain Plaza', cost: 1400, lvl: 1, radius: [4, 5, 5], joy: [1.3, 1.6, 2.0], upkeep: 10, appeal: 1, place: 'grass', road: false,
     desc: 'Palms and a fountain. A meeting point that tourists like too.' },
   pool: { cat: 'leisure', name: 'Public Pool', cost: 3500, lvl: 2, radius: [5, 6, 6], joy: [1.0, 1.2, 1.5], heat: true, upkeep: 30, place: 'grass', road: true,
-    desc: 'Keeps residents cool on heatwave days. Expensive to run.' },
+    desc: 'A big splash for the whole neighbourhood. Expensive to run.' },
   beachclub: { cat: 'leisure', name: 'Beach Club', cost: 5000, lvl: 3, radius: [5, 5, 6], joy: [1.2, 1.5, 1.8], heat: true, appeal: 2, noise: 2, upkeep: 20, place: 'beach', road: true,
-    desc: 'Cools the neighbourhood and draws tourists, but parties late on the sand.' },
+    desc: 'Lifts the neighbourhood and draws tourists, but parties late on the sand.' },
   garden: { cat: 'leisure', name: 'Botanical Garden', cost: 9000, lvl: 4, radius: [7, 8, 8], joy: [2.0, 2.4, 2.8], appeal: 3, upkeep: 45, place: 'grass', road: true,
     desc: 'Cacti and terraces. A big happiness boost and a tourist draw.' },
 
@@ -222,13 +223,15 @@ const UPGRADE_COST = [0, 0.6, 1.2];
 const MOVE_FEE = 0.25, DEMOLISH_FEE = 0.1;
 
 const WEATHER = {
-  sunny: { name: 'Sunny', joy: 3, p: 0.6 },
-  cloudy: { name: 'Cloudy', joy: 0, p: 0.27 },
-  heat: { name: 'Heatwave', joy: -4, p: 0.08 },
-  rain: { name: 'Rain', joy: -5, p: 0.035 },
-  storm: { name: 'Storm', joy: -8, p: 0.015 },
+  // weather sways the ship and the tourists, but not the residents' happiness
+  sunny: { name: 'Sunny', p: 0.6 },
+  cloudy: { name: 'Cloudy', p: 0.27 },
+  heat: { name: 'Heatwave', p: 0.08 },
+  rain: { name: 'Rain', p: 0.035 },
+  storm: { name: 'Storm', p: 0.015 },
 };
 
 const TRANSIT_WALK = 4;
 const ABANDON_HOME = 0.40, UNREST = 0.45, STRIKE = 0.40;
+const HAPPY_GAIN = 1.4; // every happiness effect is this much stronger now that weather plays no part
 const F1 = { every: 20, raceStart: 14 * 60, laps: 5, cars: 10, tileFee: 400, raceCost: 60000, minTiles: 24 };

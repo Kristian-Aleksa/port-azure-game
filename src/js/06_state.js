@@ -91,9 +91,9 @@ function netNext(k, bit, out) {
 }
 
 // ---- new game ---------------------------------------------------------------------
-function newGame(seed, name) {
-  G.seed = seed; G.name = name || 'Port Azur';
-  G.map = genMap(seed);
+function newGame(seed, name, mapV = MAP_V) {
+  G.seed = seed; G.name = name || 'Port Azur'; G.mapV = mapV;
+  G.map = genMap(seed, mapV);
   const N = MAP_W * MAP_H;
   G.net = new Uint8Array(N); G.bid = new Int32Array(N); G.lvl = new Int8Array(N); G.ramp = new Uint8Array(N);
   G.buildings = new Map(); G.nextId = 1; G.busStops = new Map();

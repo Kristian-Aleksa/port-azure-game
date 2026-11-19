@@ -29,7 +29,7 @@ const BF = ['id', 'type', 'x', 'y', 'lv', 'v', 'facing', 'done', 'doneAt', 'res'
 const round2 = (o) => { const r = {}; for (const k in o || {}) r[k] = Math.round(o[k] * 100) / 100; return r; };
 function serialize() {
   return {
-    v: SAVE_VERSION, seed: G.seed, name: G.name, t: G.t, money: Math.round(G.money), loan: G.loan, debtDays: G.debtDays, tax: G.tax,
+    v: SAVE_VERSION, mapV: G.mapV, seed: G.seed, name: G.name, t: G.t, money: Math.round(G.money), loan: G.loan, debtDays: G.debtDays, tax: G.tax,
     movingList: G.movingList, level: G.level, weather: G.weather, forecast: G.forecast,
     history: G.history.slice(-20), goals: G.goals, stats: G.stats, moods: G.moods, f1: G.f1, petition: G.petition, lastPetition: G.lastPetition,
     unrestDays: G.unrestDays, strikeDays: G.strikeDays, pending: G.pending, tourists: G.tourists,
@@ -94,7 +94,7 @@ async function initCloud() {
       if (s && s.v === SAVE_VERSION && (!SAVES[SLOTS[i]] || (s.savedAt || 0) > (SAVES[SLOTS[i]].savedAt || 0))) { SAVES[SLOTS[i]] = s; changed = true; }
     });
     const title = document.getElementById('title');
-    if (changed && title && !title.hidden) showTitle();
+    if (changed && title && !title.hidden) { const box = document.getElementById('tSlots'); showTitle(!!box && !box.hidden); }
   } catch (e) { /* not inside Claude, or offline */ }
 }
 function resetWorld() {
@@ -119,7 +119,7 @@ function startNewCity(seed) {
 }
 function loadGame(s) {
   s = JSON.parse(JSON.stringify(s)); // play on a copy: the save (or the built-in demo) never changes underneath
-  newGame(s.seed, s.name);
+  newGame(s.seed, s.name, s.mapV || 1); // saves from before map version 2 keep their tunnels where they were
   const N = MAP_W * MAP_H;
   G.net = unrle(s.net, N); G.lvl = unrle(s.lvl, N, Int8Array); G.ramp = unrle(s.ramp, N);
   G.bid = new Int32Array(N);

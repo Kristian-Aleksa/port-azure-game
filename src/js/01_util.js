@@ -33,6 +33,47 @@ function fbm(x, y, s = 0, oct = 4) {
   for (let i = 0; i < oct; i++) { v += amp * vnoise(x * f, y * f, s + i * 101); n += amp; amp *= 0.5; f *= 2.03; }
   return v / n;
 }
+// 3D value noise in [0,1): textures that wrap around steep faces without stretching. It has its own
+// fast integer hash; the lattice is hashed as (x*P1) ^ (y*P2) ^ (z*P3 + seed).
+const P1 = 0x8da6b343 | 0, P2 = 0xd8163841 | 0, P3 = 0xcb1ab31f | 0;
+function fin(h) {
+  h = Math.imul(h ^ (h >>> 15), 0x2c1b3c6d); h = Math.imul(h ^ (h >>> 12), 0x297a2d39);
+  return ((h ^ (h >>> 15)) >>> 0) * 2.3283064365386963e-10;
+}
+function vnoise3(x, y, z, s = 0) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  let xf = x - xi, yf = y - yi, zf = z - zi;
+  xf = xf * xf * (3 - 2 * xf); yf = yf * yf * (3 - 2 * yf); zf = zf * zf * (3 - 2 * zf);
+  const xa = Math.imul(xi, P1), xb = (xa + P1) | 0, ya = Math.imul(yi, P2), yb = (ya + P2) | 0;
+  const za = (Math.imul(zi, P3) + Math.imul(s, 0x6b43a9b5)) | 0, zb = (za + P3) | 0;
+  const c000 = fin(xa ^ ya ^ za), c100 = fin(xb ^ ya ^ za), c010 = fin(xa ^ yb ^ za), c110 = fin(xb ^ yb ^ za);
+  const c001 = fin(xa ^ ya ^ zb), c101 = fin(xb ^ ya ^ zb), c011 = fin(xa ^ yb ^ zb), c111 = fin(xb ^ yb ^ zb);
+  const l0 = c000 + (c100 - c000) * xf, l1 = c010 + (c110 - c010) * xf, l2 = c001 + (c101 - c001) * xf, l3 = c011 + (c111 - c011) * xf;
+  const lo = l0 + (l1 - l0) * yf, hi = l2 + (l3 - l2) * yf;
+  return lo + (hi - lo) * zf;
+}
+// the same noise with its gradient in VD (for bump-lit rock)
+const VD = [0, 0, 0];
+function vnoise3d(x, y, z, s = 0) {
+  const xi = Math.floor(x), yi = Math.floor(y), zi = Math.floor(z);
+  const ux = x - xi, uy = y - yi, uz = z - zi;
+  const xf = ux * ux * (3 - 2 * ux), yf = uy * uy * (3 - 2 * uy), zf = uz * uz * (3 - 2 * uz);
+  const xa = Math.imul(xi, P1), xb = (xa + P1) | 0, ya = Math.imul(yi, P2), yb = (ya + P2) | 0;
+  const za = (Math.imul(zi, P3) + Math.imul(s, 0x6b43a9b5)) | 0, zb = (za + P3) | 0;
+  const c000 = fin(xa ^ ya ^ za), c100 = fin(xb ^ ya ^ za), c010 = fin(xa ^ yb ^ za), c110 = fin(xb ^ yb ^ za);
+  const c001 = fin(xa ^ ya ^ zb), c101 = fin(xb ^ ya ^ zb), c011 = fin(xa ^ yb ^ zb), c111 = fin(xb ^ yb ^ zb);
+  const k1 = c100 - c000, k2 = c010 - c000, k3 = c001 - c000, k4 = c000 - c100 - c010 + c110;
+  const k5 = c000 - c010 - c001 + c011, k6 = c000 - c100 - c001 + c101, k7 = -c000 + c100 + c010 - c110 + c001 - c101 - c011 + c111;
+  VD[0] = 6 * ux * (1 - ux) * (k1 + k4 * yf + k6 * zf + k7 * yf * zf);
+  VD[1] = 6 * uy * (1 - uy) * (k2 + k5 * zf + k4 * xf + k7 * zf * xf);
+  VD[2] = 6 * uz * (1 - uz) * (k3 + k6 * xf + k5 * yf + k7 * xf * yf);
+  return c000 + k1 * xf + k2 * yf + k3 * zf + k4 * xf * yf + k5 * yf * zf + k6 * zf * xf + k7 * xf * yf * zf;
+}
+function fbm3(x, y, z, s = 0, oct = 3) {
+  let v = 0, amp = 0.5, f = 1, n = 0;
+  for (let i = 0; i < oct; i++) { v += amp * vnoise3(x * f, y * f, z * f, s + i * 101); n += amp; amp *= 0.5; f *= 2.03; }
+  return v / n;
+}
 // 4x4 ordered dither threshold in [0,1)
 const BAYER = [0, 8, 2, 10, 12, 4, 14, 6, 3, 11, 1, 9, 15, 7, 13, 5].map((v) => (v + 0.5) / 16);
 const bayer = (x, y) => BAYER[(y & 3) * 4 + (x & 3)];

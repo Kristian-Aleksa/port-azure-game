@@ -62,7 +62,7 @@ function renderSlots(el) {
     return `<div class="slot"><span class="sn">${slotName(s)}</span><div class="si">${info}</div><div class="sa">
       ${s !== 'auto' ? `<button class="mini" data-save="${s}" ${tipAttr('Save here', d ? 'Overwrite this slot with the current city.' : 'Save the current city in this slot.')}>${icon('save')} Save</button>` : ''}
       ${d ? `<button class="mini" data-load="${s}" ${tipAttr('Load', 'Unsaved progress in the current city is lost.')}>${icon('load')} Load</button>` : ''}
-      ${d && s !== 'auto' ? `<button class="mini danger" data-del="${s}" ${tipAttr('Delete save')}>${icon('trash')}</button>` : ''}</div></div>`;
+      ${d ? `<button class="mini danger" data-del="${s}" ${tipAttr('Delete save', 'Removes this save for good. Click again to confirm.')}>${icon('trash')} Delete</button>` : ''}</div></div>`;
   }).join('');
   el.innerHTML = `<p class="muted">Saves stay in this browser${CLOUD.ready ? ' and in your private cloud slot, so they follow you to other devices' : ''}. The autosave is written at the end of every day.</p>
     <div class="slots">${rows}</div>
@@ -79,7 +79,7 @@ function renderSlots(el) {
     UI.modalSpeed = null; $('modal').hidden = true; UI.modal = null;
     loadDemo();
   }));
-  el.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => { if (!b.dataset.sure) { b.dataset.sure = '1'; b.innerHTML = 'Sure?'; return; } deleteSave(b.dataset.del); renderTab(); }));
+  el.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => { if (!b.dataset.sure) { b.dataset.sure = '1'; b.innerHTML = 'Delete?'; return; } const n = SAVES[b.dataset.del] && SAVES[b.dataset.del].name; deleteSave(b.dataset.del); uiToast(`Deleted ${slotName(b.dataset.del)}${n ? ' · ' + esc(n) : ''}.`); renderTab(); }));
   $('mNew').addEventListener('click', (e) => { const b = e.currentTarget; if (!b.dataset.sure) { b.dataset.sure = '1'; b.textContent = 'Lose this city?'; return; } UI.modalSpeed = null; $('modal').hidden = true; UI.modal = null; startNewCity(Math.floor(Math.random() * 1e9)); closeTitle(); });
   $('mTitle').addEventListener('click', () => { saveGame('auto'); UI.modalSpeed = null; $('modal').hidden = true; UI.modal = null; showTitle(); });
 }
@@ -152,7 +152,6 @@ function renderHelp(el) {
 }
 
 // ---- title screen ----------------------------------------------------------------------------------
-function latestSave() { let best = null; for (const s of SLOTS) { const d = SAVES[s]; if (d && (!best || d.savedAt > best.savedAt)) best = d; } return best; }
 // Behind the title: the demo city, its clock stopped mid-morning, the camera drifting along the coast
 // from Fontvieille to Larvotto and back while traffic, boats and people go about their day.
 function titleBackdrop() {
@@ -166,19 +165,17 @@ function attractCam(t) {
   const T = 160, k = (t % (2 * T)) / T, u = (1 - Math.cos(Math.PI * k)) / 2;
   centerOnTile(lerp(20, 74, u), lerp(26.5, 24.5, u) + 0.5);
 }
-function showTitle() {
+function showTitle(openSlots) {
   if (!UI.backdrop) titleBackdrop();
   const t = $('title');
-  const save = latestSave();
   const any = SLOTS.some((s) => SAVES[s]);
   t.innerHTML = `<div class="title-card">
     <h1>Port Azur</h1>
     <p class="tag">A harbour city squeezed between a giant mountain and the sea.</p>
     <div class="title-acts">
-      ${save ? `<button id="tContinue" class="primary">Continue ${esc(save.name)} <small>Day ${Math.floor(save.t / DAY_MIN) + 1} · ${fmtNum(save.pop || 0)} residents</small></button>` : ''}
-      <button id="tNew" class="${save ? '' : 'primary'}">New city <small>a fresh stretch of coast · ${fmtMoney(ECON.start)}</small></button>
+      <button id="tNew" class="primary">New city <small>a fresh stretch of coast · ${fmtMoney(ECON.start)}</small></button>
+      ${any ? '<button id="tLoad">Load game <small>continue a saved city</small></button>' : ''}
       <button id="tDemo">Explore the demo city <small>${fmtNum(DEMO_SAVE.pop || 0)} residents · every landmark, fully upgraded</small></button>
-      ${any ? '<button id="tLoad">Load game <small>choose a save slot</small></button>' : ''}
     </div>
     <div id="tSlots" class="slots title-slots" hidden></div>
     <p class="hint">A ship docks every morning. Keep the books in the black and the residents on side.</p>
@@ -186,15 +183,27 @@ function showTitle() {
   t.hidden = false;
   document.body.classList.add('at-title');
   G.speed = 0; R.attract = true; G.started = false;
-  if (save) $('tContinue').addEventListener('click', () => { loadGame(save); closeTitle(); });
   $('tDemo').addEventListener('click', () => loadDemo());
-  if (any) $('tLoad').addEventListener('click', () => {
-    const box = $('tSlots'); box.hidden = !box.hidden;
-    box.innerHTML = `<button class="slot-btn" data-demo="1"><b>Demo · ${esc(DEMO_SAVE.name)}</b><small>${demoInfo()}</small></button>` +
-      SLOTS.filter((s) => SAVES[s]).map((s) => { const d = SAVES[s]; return `<button class="slot-btn" data-slot="${s}"><b>${slotName(s)} · ${esc(d.name)}</b><small>Day ${Math.floor(d.t / DAY_MIN) + 1} · ${fmtNum(d.pop || 0)} residents · ${ago(d.savedAt)}</small></button>`; }).join('');
-    box.querySelectorAll('[data-slot]').forEach((b) => b.addEventListener('click', () => { loadGame(SAVES[b.dataset.slot]); closeTitle(); }));
-    box.querySelectorAll('[data-demo]').forEach((b) => b.addEventListener('click', () => loadDemo()));
-  });
+  const fillSlots = () => {
+    const box = $('tSlots');
+    // newest first
+    const list = SLOTS.filter((s) => SAVES[s]).sort((p, q) => (SAVES[q].savedAt || 0) - (SAVES[p].savedAt || 0));
+    box.innerHTML = list.map((s) => {
+      const d = SAVES[s];
+      return `<div class="tslot"><button class="slot-btn" data-slot="${s}"><b>${slotName(s)} · ${esc(d.name)}</b><small>Day ${Math.floor(d.t / DAY_MIN) + 1} · ${fmtNum(d.pop || 0)} residents · ${fmtMoney(d.money)} · ${ago(d.savedAt)}</small></button>`
+        + `<button class="slot-del" data-del="${s}" ${tipAttr('Delete save', 'Removes this save for good. Click again to confirm.')}>${icon('trash')}<span>Delete</span></button></div>`;
+    }).join('');
+    box.querySelectorAll('[data-slot]').forEach((b) => b.addEventListener('click', () => { const d = SAVES[b.dataset.slot]; if (!d) return; loadGame(d); closeTitle(); }));
+    box.querySelectorAll('[data-del]').forEach((b) => b.addEventListener('click', () => {
+      if (!b.dataset.sure) { b.dataset.sure = '1'; b.classList.add('sure'); b.querySelector('span').textContent = 'Sure?'; return; }
+      deleteSave(b.dataset.del); sfx('click');
+      if (SLOTS.some((s) => SAVES[s])) fillSlots(); else showTitle();
+    }));
+  };
+  if (any) {
+    $('tLoad').addEventListener('click', () => { const box = $('tSlots'); box.hidden = !box.hidden; if (!box.hidden) fillSlots(); });
+    if (openSlots) { $('tSlots').hidden = false; fillSlots(); }
+  }
   $('tNew').addEventListener('click', () => {
     startNewCity(Math.floor(Math.random() * 1e9)); closeTitle();
     setTimeout(() => uiOpenMenu('help'), 300);
