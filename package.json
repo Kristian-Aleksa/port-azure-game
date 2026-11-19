@@ -1,0 +1,15 @@
+{
+  "name": "port-azur",
+  "version": "1.0.0",
+  "description": "An isometric pixel-art harbour city builder on a Monaco-like coast, squeezed between a giant mountain and the sea.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "preview": "node build.mjs && node tools/serve.mjs",
+    "demo": "node build.mjs && node tools/demo/make-demo.mjs && node build.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
