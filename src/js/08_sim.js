@@ -76,7 +76,7 @@ function computeHappiness() {
     if (B[b.type].noise && !b.closed) noisy.push(b);
   }
   G.pop = pop; G.effPop = eff;
-  const cap = portCap(), w = G.weather, day = G.day();
+  const cap = portCap(), day = G.day();
   const raceNear = isRaceDay() && G.circuit ? new Set(G.circuit.tiles) : null;
   const tourHeavy = G.tourists.day > Math.max(60, pop * 0.6);
   const tally = {}, praise = {};
@@ -100,13 +100,8 @@ function computeHappiness() {
     for (const e of h.amen || []) { const j = joyOf(e.l) * e.f; if (LANDMARK.has(e.l.type)) land += j; else park += j; }
     if (park > 0) F.parks = Math.min(14, park * 6); else if (pop >= 40) F.noPark = pop >= 400 ? -9 : -6;
     if (land > 0) F.landmarks = Math.min(18, land * 5);
-    if (w === 'heat') { if (h.heatCover) F.parks = (F.parks || 0) + 4; else F.heat = -8; }
     if (h.transit) { F.transit = h.transit === 'rail' ? 8 : 5; if (h.lines.some((l) => l.load > 1.15)) F.packed = -4; }
     else if (pop >= 150) F.noTransit = pop >= 600 ? -10 : -6;
-    if (w === 'rain' && !h.transit) F.rain = -4;
-    if (w === 'storm') F.storm = WEATHER.storm.joy;
-    else if (w === 'rain') F.rain = (F.rain || 0) + WEATHER.rain.joy;
-    else if (WEATHER[w].joy > 0) F.weather = WEATHER[w].joy;
     let pd = 99; for (const p of ports) pd = Math.min(pd, distTo(p, h.x, h.y));
     if (pd <= 2) F.portNoise = -6;
     let nz = 0; for (const n of noisy) { if (distTo(n, h.x, h.y) <= 2.5) nz = Math.min(nz, -3 * B[n.type].noise * (h.calm ? 0.5 : 1)); }
@@ -123,6 +118,8 @@ function computeHappiness() {
     for (const md of G.moods) F[md.key] = (F[md.key] || 0) + md.v;
     if (raceNear) { let near = false; for (const [dx, dy] of [[0, 0], ...DIRS]) if (raceNear.has(G.idx(h.x + dx, h.y + dy))) near = true; if (near) F.raceNoise = -6; }
     if (h.leftUntil && h.leftUntil >= day) F.left = -4;
+    // the weather no longer sways anyone's mood; everything the city does counts for more instead
+    for (const k in F) F[k] = Math.round(F[k] * HAPPY_GAIN);
     let H = 50;
     for (const k in F) H += F[k];
     h.happy = clamp(H / 100, 0, 1);

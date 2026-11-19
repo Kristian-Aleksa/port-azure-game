@@ -410,33 +410,266 @@ function landModel(x, y) {
 }
 
 // ---- mountain tiles -------------------------------------------------------------------------
-// rock and scrub at a point of the mountain: wx, wy in world units, Z in px, nz = smoothed slope (1 flat)
-function mountainRGB(wx, wy, Z, nz, o) {
-  const steep = 1 - nz;
-  const rk = smooth(clamp((steep - 0.3) / 0.32, 0, 1)) + (Z > 650 ? 0.3 : 0) + (fbm(wx * 0.045, wy * 0.045, 3, 4) - 0.5) * 1.1
-    + (hash2(Math.floor(wx * 1.5), Math.floor(wy * 1.5), 2) - 0.5) * 0.18;
-  let c;
-  if (rk > 0.55) {
-    const bed = (((Z + vnoise(wx * 0.07, wy * 0.07, 4) * 7) % 11) + 11) % 11;
-    const crack = hash2(Math.floor((wx - wy) * 0.6), Math.floor(Z / 9), 6) < 0.12 && ((wx - wy) * 0.6 % 1 + 1) % 1 < 0.35;
-    const n = hash2(Math.floor(wx * 1.5), Math.floor(Z / 2), 7);
-    c = bed < 1.0 ? ROCK_C[3] : crack ? ROCK_C[1] : bed > 9.5 ? ROCK_C[2] : n < 0.15 ? ROCK_C[4] : ROCK_C[0];
-    if (rk < 0.62 && hash2(Math.floor(wx * 2), Math.floor(wy * 2), 3) < 0.35) c = SCRUB_C[4];
-  } else {
-    const n = vnoise(wx * 0.33, wy * 0.33, 8) + (hash2(Math.floor(wx * 2), Math.floor(wy * 2), 9) - 0.5) * 0.45;
-    c = n < 0.3 ? SCRUB_C[1] : n > 0.88 ? SCRUB_C[2] : n > 0.8 ? SCRUB_C[3] : n > 0.55 ? SCRUB_C[0] : SCRUB_C[4];
+// ---- the mountain's surface: rock, scrub, forest and snow -----------------------------------------
+// One function colours and lights every point of the mountain, both the map's own tiles and the
+// landscape beyond the map, so the two always match. It is drawn as pixel art:
+//  - light comes from smooth per-vertex normals (no visible tile triangles) plus craggy relief on the
+//    rock, and is kept to a few steps with an ordered dither on the screen's own pixel grid;
+//  - textures are 3D, so steep faces are not streaked by stretching;
+//  - little pixel trees (stone pines, holm oaks, cypresses and, higher up, firs) stand on the gentler
+//    slopes and cast short shadows, and snow lies on the high summits and in their gullies.
+const ROCK_P = ['#8b8376', '#a19a8c', '#b6af9f', '#c9c2b3', '#dcd7cb'].map(hex);
+const OCHRE_P = ['#93806a', '#a9957b', '#beaa8f', '#d0c0a5'].map(hex);
+const SCRUB_P = ['#4a5d32', '#5c713b', '#718744', '#879b51', '#9fae64'].map(hex);
+const SOIL_P = ['#8e7b5c', '#a5906d', '#b9a580'].map(hex);
+const SNOW_P = ['#a9b7c6', '#c3cfdb', '#dbe3ea', '#eef2f5', '#fbfcfd'].map(hex);
+const SNOW_Z = 1480, TREE_Z = 1150, LSTEP = 0.07;
+function terrainLight(nx, ny, nz) {
+  if (G.view === 3) { const t = nx; nx = ny; ny = -t; }
+  return clamp(AMB + nx * LW[0] + ny * LW[1] + nz * LW[2], 0.3, 1.2);
+}
+// how rocky the ground is: steep and high ground is bare (above ~0.55)
+function rockiness(wx, wy, wz, flat, Z) {
+  return smooth(clamp((0.7 - flat) / 0.32, 0, 1)) + smooth(clamp((Z - 450) / 700, 0, 1)) * 0.4
+    + (fbm3(wx * 0.04, wy * 0.04, wz * 0.04, 3, 2) - 0.5) * 1.1;
+}
+// height of the mountain surface at world tile point (fx, fy) (clamped to the generated field)
+function mtnZ(E, fx, fy) {
+  const lx = clamp(fx, -E.PX + 1e-3, MAP_W + E.PX - 1e-3), ly = clamp(fy, -E.PB + 1e-3, E.EH - E.PB - 1e-3);
+  const tx = Math.floor(lx), ty = Math.floor(ly);
+  return extMountZ(E, tx + E.PX, ty + E.PB, lx - tx, ly - ty);
+}
+
+// ---- mountain trees ----
+// Trees sit on a jittered grid of cells (TC tiles); how likely a cell holds one comes from a density
+// field kept at half-tile steps over the whole landscape (forest patches, gentle ground, below the
+// tree line, not on rock, not on the villas' plots).
+const TC = 0.24, SHX = 4, SHY = -1, TS = 1.3;
+function treeDensity(wx, wy, Z, flat) {
+  const wz = Z / ZK;
+  const rk = rockiness(wx, wy, wz, flat, Z);
+  const forest = fbm3(wx * 0.02, wy * 0.02, wz * 0.02, 41, 3);
+  return (0.08 + smooth(clamp((forest - 0.4) / 0.2, 0, 1)) * 0.86)
+    * clamp((flat - 0.42) / 0.25, 0, 1) * clamp(1 - (Z - TREE_Z) / 260, 0, 1) * clamp((0.52 - rk) / 0.2, 0, 1);
+}
+function mountTrees(E) {
+  if (E.tr) return E.tr;
+  const W2 = 2 * E.EW + 1, H2 = 2 * E.EH + 1, VW = E.EW + 1, N = W2 * H2;
+  const T = new Float32Array(N), D = new Float32Array(N), tmp = new Float32Array(N);
+  const villa = new Set();
+  for (const t of R.mtn || []) if (t.kind === 'villa') villa.add((t.y + E.PB) * E.EW + t.x + E.PX);
+  for (let j = 0; j < H2; j++) for (let i = 0; i < W2; i++) {
+    const ia = (i - 1) >> 1, ib = i >> 1, ja = (j - 1) >> 1, jb = j >> 1;
+    let ok = true;
+    for (let tj = ja; tj <= jb && ok; tj++) for (let ti = ia; ti <= ib; ti++) {
+      if (ti < 0 || tj < 0 || ti >= E.EW || tj >= E.EH) continue;
+      const k = tj * E.EW + ti;
+      if (E.type[k] !== T_MOUNT || villa.has(k)) { ok = false; break; }
+    }
+    if (!ok) continue;
+    const vi = i >> 1, vj = j >> 1, u = (i & 1) * 0.5, v = (j & 1) * 0.5;
+    const vi1 = Math.min(vi + 1, E.EW), vj1 = Math.min(vj + 1, E.EH);
+    const bl = (A) => lerp(lerp(A[vj * VW + vi], A[vj * VW + vi1], u), lerp(A[vj1 * VW + vi], A[vj1 * VW + vi1], u), v);
+    T[j * W2 + i] = treeDensity((i / 2 - E.PX) * 16, (j / 2 - E.PB) * 16, bl(E.hv), bl(E.slopeV));
   }
-  o[0] = c[0]; o[1] = c[1]; o[2] = c[2];
+  // the densest cell within a tile or so of each node: a quick "no trees near here" test
+  for (let j = 0; j < H2; j++) for (let i = 0; i < W2; i++) {
+    let m = 0;
+    for (let d = -3; d <= 3; d++) { const ii = i + d; if (ii >= 0 && ii < W2 && T[j * W2 + ii] > m) m = T[j * W2 + ii]; }
+    tmp[j * W2 + i] = m;
+  }
+  for (let j = 0; j < H2; j++) for (let i = 0; i < W2; i++) {
+    let m = 0;
+    for (let d = -4; d <= 2; d++) { const jj = j + d; if (jj >= 0 && jj < H2 && tmp[jj * W2 + i] > m) m = tmp[jj * W2 + i]; }
+    D[j * W2 + i] = m;
+  }
+  E.tr = { W2, H2, T, D };
+  return E.tr;
+}
+// tree density at world tile point (fx, fy): A = TF.T (smooth) or TF.D (the "near here" maximum)
+function treeP(TF, E, A, fx, fy) {
+  const gx = clamp((fx + E.PX) * 2, 0, TF.W2 - 1.001), gy = clamp((fy + E.PB) * 2, 0, TF.H2 - 1.001);
+  const i = Math.floor(gx), j = Math.floor(gy), u = gx - i, v = gy - j, k = j * TF.W2 + i;
+  return lerp(lerp(A[k], A[k + 1], u), lerp(A[k + TF.W2], A[k + TF.W2 + 1], u), v);
+}
+// the pixel trees, drawn once with the same leafy blobs as the town's trees, at about 60% size
+let MTS = null;
+function mtSprites() {
+  if (MTS) return MTS;
+  const HOLM = ['#34472a', '#435a31', '#57703c', '#6f8849'], FIR = ['#1f3826', '#2a4930', '#375d3b', '#4a7449'];
+  const make = (build) => { const m = new Model(); build(m); for (const b of m.blobs) { b.cx = 8 + (b.cx - 8) * TS; b.cy = 8 + (b.cy - 8) * TS; b.cz *= TS; b.rx *= TS; b.ry *= TS; b.rz *= TS; } for (const l of m.lines) { l.a = [8 + (l.a[0] - 8) * TS, 8 + (l.a[1] - 8) * TS, l.a[2] * TS]; l.b = [8 + (l.b[0] - 8) * TS, 8 + (l.b[1] - 8) * TS, l.b[2] * TS]; } const s = renderModel(m, 0, { keepData: true }); return { w: s.w, h: s.h, ax: s.ax, ay: s.ay, d: s.data }; };
+  const list = [
+    // 0, 1: stone pines
+    (m) => { m.line(8, 8, 0, 8.3, 8, 5.2, hex('#6a5341')); m.blob(8.4, 8, 6.6, 2.1, 1.7, leafMat(LEAF.pine, 61, 1.1)); m.blob(7.4, 8.5, 6.0, 1.3, 1.3, leafMat(LEAF.pine, 61, 1.1)); },
+    (m) => { m.line(8, 8, 0, 7.7, 8, 4.4, hex('#6a5341')); m.blob(7.6, 8, 5.8, 1.8, 1.5, leafMat(LEAF.pine, 62, 1.1)); },
+    // 2, 3: holm oaks
+    (m) => { m.line(8, 8, 0, 8, 8, 2, hex('#5a4636')); m.blob(8, 8, 4.4, 1.9, 2.9, leafMat(HOLM, 63, 1.2)); m.blob(7.2, 8.6, 3.4, 1.2, 2, leafMat(HOLM, 64, 1.2)); },
+    (m) => { m.line(8, 8, 0, 8, 8, 1.6, hex('#5a4636')); m.blob(8, 8, 3.7, 1.6, 2.5, leafMat(HOLM, 65, 1.2)); },
+    // 4, 5: firs and black pines
+    (m) => { m.line(8, 8, 0, 8, 8, 1.5, hex('#4e3d30')); m.blob(8, 8, 3.2, 1.6, 2.4, leafMat(FIR, 66, 1.3)); m.blob(8, 8, 6, 1.15, 2.2, leafMat(FIR, 66, 1.3)); m.blob(8, 8, 8.5, 0.7, 1.8, leafMat(FIR, 66, 1.3)); },
+    (m) => { m.line(8, 8, 0, 8, 8, 1.2, hex('#4e3d30')); m.blob(8, 8, 2.8, 1.35, 2, leafMat(FIR, 67, 1.3)); m.blob(8, 8, 5.2, 0.95, 1.9, leafMat(FIR, 67, 1.3)); m.blob(8, 8, 7.3, 0.55, 1.5, leafMat(FIR, 67, 1.3)); },
+    // 6: cypress
+    (m) => { m.blob(8, 8, 5.6, 0.85, 5.4, leafMat(LEAF.cypress, 68, 1.2)); },
+  ];
+  MTS = list.map(make);
+  let xl = 0, xr = 0, yl = 0, yh = 0;
+  for (const s of MTS) { xl = Math.max(xl, s.w - s.ax); xr = Math.max(xr, s.ax); yl = Math.max(yl, s.h - s.ay); yh = Math.max(yh, s.ay); }
+  // range of base offsets (from the pixel, in screen px) whose crown or shadow could reach a pixel
+  MTS.XL = -xl - SHX - 1; MTS.XR = xr + 1; MTS.YL = -yl - 1 + Math.min(0, -SHY); MTS.YH = yh + 1 + Math.max(0, -SHY);
+  return MTS;
+}
+function treeKind(h2, h3, z) {
+  const r = (h2 * 7.13 + h3 * 3.71) % 1, v = ((h2 * 53.7) | 0) & 1;
+  if (z > 950) return r < 0.82 ? 4 + v : 2 + v;
+  if (z > 450) return r < 0.55 ? 2 + v : r < 0.9 ? 4 + v : 6;
+  return r < 0.4 ? v : r < 0.82 ? 2 + v : 6;
+}
+const portalNear = (x, y) => {
+  for (let j = Math.max(0, y - 1); j <= Math.min(MAP_H - 1, y + 1); j++) for (let i = Math.max(0, x - 1); i <= Math.min(MAP_W - 1, x + 1); i++) if (G.net[j * MAP_W + i] & N_PORTAL) return true;
+  return false;
+};
+// Does a tree's crown (1) or its shadow (2) cover screen pixel (SX, SY), whose ground point is at
+// world (fx, fy), view depth dP? Ground slope (gx, gy) is in px of height per tile. Crown colour into o.
+const TCC_MASK = 8191;
+const TCC = { E: null, view: -1, i: new Int32Array(TCC_MASK + 1), j: new Int32Array(TCC_MASK + 1), k: new Int8Array(TCC_MASK + 1), d: new Float64Array(TCC_MASK + 1), x: new Int32Array(TCC_MASK + 1), y: new Int32Array(TCC_MASK + 1) };
+// forget the cached trees (new map, turned view, or a tunnel dug where trees stood)
+function clearTreeCache(E) { TCC.E = E || null; TCC.view = G.view; TCC.i.fill(-2147483648); }
+function treeOver(E, TF, fx, fy, gx, gy, SX, SY, dP, o) {
+  const S = mtSprites(), v3 = G.view === 3;
+  // a base dX, dY screen px away (dY > 0: below) lies about (da, db) away in view tiles
+  const gA = v3 ? gy : gx, gB = v3 ? -gx : gy;
+  const kA = Math.max(4, 16 - gA), kB = Math.max(4, 16 - gB), inv = 1 / (kA + kB);
+  let aLo = 1e9, aHi = -1e9, bLo = 1e9, bHi = -1e9;
+  for (let c = 0; c < 4; c++) {
+    const dX = c & 1 ? S.XR : S.XL, dY = c & 2 ? S.YH : S.YL;
+    const u = dX / 32, db = (dY - kA * u) * inv, da = db + u;
+    if (da < aLo) aLo = da; if (da > aHi) aHi = da; if (db < bLo) bLo = db; if (db > bHi) bHi = db;
+  }
+  aLo = Math.max(aLo, -1.2) - 0.04; aHi = Math.min(aHi, 1.2) + 0.04; bLo = Math.max(bLo, -1.2) - 0.04; bHi = Math.min(bHi, 1.2) + 0.04;
+  // back to world tiles
+  let x0, x1, y0, y1;
+  if (v3) { x0 = fx - bHi; x1 = fx - bLo; y0 = fy + aLo; y1 = fy + aHi; } else { x0 = fx + aLo; x1 = fx + aHi; y0 = fy + bLo; y1 = fy + bHi; }
+  const i0 = Math.floor(x0 / TC), i1 = Math.floor(x1 / TC), j0 = Math.floor(y0 / TC), j1 = Math.floor(y1 / TC);
+  let best = -1e9, col = 0, shadow = false;
+  if (TCC.E !== E || TCC.view !== G.view) clearTreeCache(E);
+  for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+    // each cell's tree is worked out once and kept in a small cache: neighbouring pixels share cells
+    const slot = (Math.imul(i, 73856093) ^ Math.imul(j, 19349663)) & TCC_MASK;
+    if (TCC.i[slot] !== i || TCC.j[slot] !== j) {
+      TCC.i[slot] = i; TCC.j[slot] = j; TCC.k[slot] = -1;
+      const h = hash2(i, j, 77), h2 = hash2(i, j, 78), h3 = hash2(i, j, 79);
+      const bx = (i + 0.12 + 0.76 * h2) * TC, by = (j + 0.12 + 0.76 * h3) * TC;
+      if (h < treeP(TF, E, TF.T, bx, by) && !(bx >= 0 && by >= 0 && bx < MAP_W && by < MAP_H && portalNear(bx | 0, by | 0))) {
+        const zb = mtnZ(E, bx, by);
+        const ab = v3 ? by : bx, bb = v3 ? MAP_W - bx : by;
+        TCC.k[slot] = treeKind(h2, h3, zb); TCC.d[slot] = ab + bb;
+        TCC.x[slot] = Math.floor((ab - bb) * 32); TCC.y[slot] = Math.floor((ab + bb) * 16 - zb);
+      }
+    }
+    const kind = TCC.k[slot];
+    if (kind < 0) continue;
+    const dB = TCC.d[slot];
+    if (dB < dP - 0.08 || dB <= best) continue;
+    const s = S[kind];
+    const ix = s.ax + SX - TCC.x[slot], iy = s.ay + SY - TCC.y[slot];
+    if (ix >= 0 && iy >= 0 && ix < s.w && iy < s.h) {
+      const c = s.d[iy * s.w + ix];
+      if (c >>> 24) { best = dB; col = c; continue; }
+    }
+    const jx = ix - SHX, jy = iy - SHY;
+    if (!shadow && jx >= 0 && jy >= 0 && jx < s.w && jy < s.h && s.d[jy * s.w + jx] >>> 24) shadow = true;
+  }
+  if (col) { o[0] = col & 255; o[1] = (col >>> 8) & 255; o[2] = (col >>> 16) & 255; return 1; }
+  return shadow ? 2 : 0;
+}
+
+// craggy relief: sharp-crested ridged noise, stretched up and down the faces into flutes and
+// buttresses; the normal (nx, ny, nz) is tilted along the surface by its slope, into CR
+const CR = [0, 0, 1];
+function crag(wx, wy, wz, nx, ny, nz, BS) {
+  let gx = 0, gy = 0, gz = 0;
+  for (let q = 0; q < 2; q++) {
+    const f = q ? 0.21 : 0.085, w = q ? 0.55 : 1;
+    const n = vnoise3d(wx * f, wy * f, wz * f * 0.45, 31 + q) * 2 - 1, sg = n > 0 ? -w : w;
+    gx += VD[0] * f * sg; gy += VD[1] * f * sg; gz += VD[2] * f * 0.45 * sg;
+  }
+  const dn = gx * nx + gy * ny + gz * nz;
+  const x = nx - (gx - dn * nx) * BS, y = ny - (gy - dn * ny) * BS, z = nz - (gz - dn * nz) * BS;
+  const l = Math.hypot(x, y, z); CR[0] = x / l; CR[1] = y / l; CR[2] = z / l;
+}
+// colour of the mountain at world tile point (fx, fy), height Z (px) into o; returns the light factor
+function mountainSurface(E, fx, fy, Z, o) {
+  const lx = clamp(fx, -E.PX + 1e-3, MAP_W + E.PX - 1e-3), ly = clamp(fy, -E.PB + 1e-3, E.EH - E.PB - 1e-3);
+  const i0 = Math.floor(lx), j0 = Math.floor(ly), u = lx - i0, v = ly - j0;
+  const VW = E.EW + 1, b = (j0 + E.PB) * VW + i0 + E.PX;
+  const bil = (A) => lerp(lerp(A[b], A[b + 1], u), lerp(A[b + VW], A[b + VW + 1], u), v);
+  let nx = bil(E.nx), ny = bil(E.ny), nz = bil(E.slopeV);
+  const flat = nz;
+  const wx = fx * 16, wy = fy * 16, wz = Z / ZK;
+  // the screen pixel this point lands on: ordered dither and tree sprites are aligned to it
+  const v3 = G.view === 3, va = v3 ? fy : fx, vb = v3 ? MAP_W - fx : fy;
+  const SX = Math.floor((va - vb) * 32), SY = Math.floor((va + vb) * 16 - Z);
+  const bd = BAYER[(SY & 3) * 4 + (SX & 3)];
+  // trees stand in front of whatever ground is behind them
+  const TF = mountTrees(E);
+  let shade = 1, forest = 0;
+  const dmax = treeP(TF, E, TF.D, fx, fy);
+  if (dmax > 0.003) {
+    const gs = ZK * 16 / Math.max(0.12, nz);
+    const r = treeOver(E, TF, fx, fy, -nx * gs, -ny * gs, SX, SY, va + vb, o);
+    if (r === 1) return 1;
+    if (r === 2) shade = 0.74;
+    forest = treeP(TF, E, TF.T, fx, fy);
+  }
+  // snow on the summits, lying on gentle ground and in the gullies first, with rock showing through
+  if (Z > SNOW_Z - 330) {
+    const line = SNOW_Z + (fbm(wx * 0.011, wy * 0.011, 21, 2) - 0.5) * 380;
+    const lie = (Z - line) / 150 + (flat - 0.45) * 1.5 + (vnoise3(wx * 0.1, wy * 0.1, wz * 0.035, 24) - 0.5) * 1.3
+      + (vnoise3(wx * 0.35, wy * 0.35, wz * 0.35, 26) - 0.5) * 0.35;
+    if (lie > 0) {
+      crag(wx, wy, wz, nx, ny, nz, 2.6);
+      const k = terrainLight(CR[0], CR[1], CR[2]) * shade;
+      const c = SNOW_P[clamp(Math.floor((k - 0.55) / 0.17 + 0.5 + (bd - 0.5) * 0.6), 0, 4)];
+      o[0] = c[0]; o[1] = c[1]; o[2] = c[2];
+      return 1;
+    }
+  }
+  const rk = rockiness(wx, wy, wz, flat, Z);
+  if (rk + (bd - 0.5) * 0.03 > 0.55) {
+    // limestone: broad patches of tone, faint bedding and warm staining
+    const big = fbm3(wx * 0.018, wy * 0.018, wz * 0.03, 51, 2);
+    const bed = vnoise(wz * 0.08 + big * 5, (wx + wy) * 0.006, 52);
+    const fine = vnoise3(wx * 0.24, wy * 0.24, wz * 0.24, 53);
+    const T = big * 0.62 + bed * 0.27 + fine * 0.14 - 0.015;
+    const c = ROCK_P[clamp(Math.floor((T - 0.5) * 10 + 2.5 + (bd - 0.5) * 0.35), 0, 4)];
+    o[0] = c[0]; o[1] = c[1]; o[2] = c[2];
+    const st = vnoise3(wx * 0.02, wy * 0.02, wz * 0.02, 56) + (fine - 0.5) * 0.2;
+    if (st > 0.62) { const t = Math.min(0.42, (st - 0.62) * 3); o[0] += (OCHRE_P[1][0] - o[0]) * t; o[1] += (OCHRE_P[1][1] - o[1]) * t; o[2] += (OCHRE_P[1][2] - o[2]) * t; }
+    crag(wx, wy, wz, nx, ny, nz, 5.5);
+    nx = CR[0]; ny = CR[1]; nz = CR[2];
+  } else {
+    // scrub and meadow, darker on the forest floor, with bare earth here and there
+    const n1 = fbm3(wx * 0.07, wy * 0.07, wz * 0.07, 8, 2), n2 = vnoise3(wx * 0.4, wy * 0.4, wz * 0.4, 9);
+    const soil = vnoise3(wx * 0.05, wy * 0.05, wz * 0.05, 10) + (n2 - 0.5) * 0.25 + rk * 0.25;
+    let c;
+    if (soil > 0.86 && forest < 0.35) c = SOIL_P[clamp(Math.floor(n2 * 3 + (bd - 0.5) * 0.3), 0, 2)];
+    else {
+      const g = n1 * 0.62 + n2 * 0.38 - forest * 0.3 + (rk - 0.3) * 0.12;
+      c = SCRUB_P[clamp(Math.floor((g - 0.5) * 9 + 2.5 + (bd - 0.5) * 0.3), 0, 4)];
+    }
+    o[0] = c[0]; o[1] = c[1]; o[2] = c[2];
+  }
+  const l = Math.hypot(nx, ny, nz);
+  const k = terrainLight(nx / l, ny / l, nz / l) * shade;
+  return Math.floor(k / LSTEP + 0.5 + (bd - 0.5) * 0.6) * LSTEP;
 }
 function terrainMatFor(tx, ty) {
-  const ox = tx * 16, oy = ty * 16;
-  const VW = MAP_W + 1, sv = G.map.slopeV;
-  const n00 = sv[ty * VW + tx], n10 = sv[ty * VW + tx + 1], n11 = sv[(ty + 1) * VW + tx + 1], n01 = sv[(ty + 1) * VW + tx];
+  const E = G.map.ext;
   return mat((s, t, f, o) => {
     const F = f.f;
     const X = F.o[0] + s * F.u[0] + t * F.v[0], Y = F.o[1] + s * F.u[1] + t * F.v[1], Z = F.o[2] + s * F.u[2] + t * F.v[2];
-    const fx = clamp(X / 16, 0, 1), fy = clamp(Y / 16, 0, 1);
-    mountainRGB(ox + X, oy + Y, Z, lerp(lerp(n00, n10, fx), lerp(n01, n11, fx), fy), o);
+    const k = mountainSurface(E, tx + clamp(X / 16, 0, 1), ty + clamp(Y / 16, 0, 1), Z, o);
+    o[3] = k / f.k; // replaces the flat triangle's light with the smooth one
     return 1;
   });
 }

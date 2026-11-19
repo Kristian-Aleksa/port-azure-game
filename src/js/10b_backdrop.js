@@ -49,28 +49,17 @@ function extMountZ(E, i, j, u, v) {
   return c2 + g[0] * (u - 1) + g[1] * (v - 1);
 }
 // light factor of a surface with world normal (nx, ny, nz), as the rasterizer computes it
-function lightK(nx, ny, nz) {
-  if (G.view === 3) { const t = nx; nx = ny; ny = -t; }
-  return clamp(AMB + nx * LW[0] + ny * LW[1] + nz * LW[2], 0.3, 1.2);
-}
+const lightK = terrainLight;
 const outside = (fx, fy) => Math.max(0, -fx, fx - MAP_W, -fy, fy - MAP_H);
 function packHaze(o, fx, fy) {
   const hz = clamp((outside(fx, fy) - 5) / 34, 0, 1) * 0.42;
   if (hz > 0) { o[0] += (HAZE[0] - o[0]) * hz; o[1] += (HAZE[1] - o[1]) * hz; o[2] += (HAZE[2] - o[2]) * hz; }
   return packC(o);
 }
-// colour of the mountain surface at world point (fx, fy) and height z
+// colour of the mountain surface at world point (fx, fy) and height z (the same shader as the map's tiles)
 function mountPix(E, fx, fy, z) {
-  const lx = cfx(E, fx), ly = cfy(E, fy);
-  const tx = Math.floor(lx), ty = Math.floor(ly), i = tx + E.PX, j = ty + E.PB;
-  const u = lx - tx, v = ly - ty;
-  extMountZ(E, i, j, u, v);
-  const gx = BD.grad[0] / (16 * ZK), gy = BD.grad[1] / (16 * ZK), nl = Math.sqrt(gx * gx + gy * gy + 1);
-  const k = lightK(-gx / nl, -gy / nl, 1 / nl);
-  const VW = E.EW + 1, sv = E.slopeV;
-  const nz = lerp(lerp(sv[j * VW + i], sv[j * VW + i + 1], u), lerp(sv[(j + 1) * VW + i], sv[(j + 1) * VW + i + 1], u), v);
   const c = BD.col;
-  mountainRGB(fx * 16, fy * 16, z, nz, c);
+  const k = mountainSurface(E, fx, fy, z, c);
   shadeTo(c, c[0], c[1], c[2], k);
   return packHaze(c, fx, fy);
 }
@@ -210,11 +199,9 @@ function renderBackdrop(cx, cy, r) { const job = newBackdropJob(cx, cy, r); runB
 // Keep the visible chunks' scenery up to date within a time budget: a quick 1/4 resolution pass
 // so nothing is left blank, then the final pass (full resolution near the town, half far away)
 // a few columns at a time, nearest the middle of the screen first.
-function finalRes(cx, cy) {
-  const b = R.bounds; if (!b) return 1;
-  const X = (cx + 0.5) * CHUNK, Y = (cy + 0.5) * CHUNK, m = 700;
-  return X > b.x0 - m && X < b.x1 + m && Y > b.y0 - m && Y < b.y1 + m ? 1 : 2;
-}
+// full resolution whenever a scenery pixel covers most of a screen pixel or more (always on
+// high-density screens); half resolution only when zoomed far out on a standard screen
+function finalRes() { return R.zoom * (window.devicePixelRatio || 1) >= 0.74 ? 1 : 2; }
 function updateBackdrop(ox, oy, vw, vh) {
   const t0 = performance.now();
   const want = [];
@@ -222,6 +209,8 @@ function updateBackdrop(ox, oy, vw, vh) {
     const key = cx + ',' + cy;
     let ch = R.chunks.get(key);
     if (!ch) { ch = { cv: null, dirty: true }; R.chunks.set(key, ch); }
+    // zoomed in on a chunk drawn at half resolution: sharpen it (the old one stays until then)
+    if (ch.bd && ch.bd.done && ch.bd.r > finalRes()) ch.bd.done = false;
     if (!ch.bd || !ch.bd.done) want.push({ ch, cx, cy, d: Math.hypot((cx + 0.5) * CHUNK - (ox + vw / 2), (cy + 0.5) * CHUNK - (oy + vh / 2)) });
   }
   if (!want.length) return;
@@ -237,7 +226,7 @@ function updateBackdrop(ox, oy, vw, vh) {
   for (const w of want) {
     const ch = w.ch;
     if (!ch.bd || ch.bd.done) continue;
-    if (!ch.job) ch.job = newBackdropJob(w.cx, w.cy, finalRes(w.cx, w.cy));
+    if (!ch.job || ch.job.r > finalRes()) ch.job = newBackdropJob(w.cx, w.cy, finalRes());
     if (runBackdropJob(ch.job, deadline)) { ch.bd = finishBackdropJob(ch.job); ch.job = null; }
     if (performance.now() > deadline) return;
   }
@@ -247,8 +236,7 @@ function drawBackdropLayer(ctx, ox, oy, vw, vh, layer) {
     const ch = R.chunks.get(cx + ',' + cy);
     const cv = ch && ch.bd && ch.bd[layer];
     if (!cv) continue;
-    if (ch.bd.r === 1) ctx.drawImage(cv, cx * CHUNK, cy * CHUNK);
-    else { const sm = ctx.imageSmoothingEnabled; ctx.imageSmoothingEnabled = false; ctx.drawImage(cv, cx * CHUNK, cy * CHUNK, CHUNK, CHUNK); ctx.imageSmoothingEnabled = sm; }
+    blitChunk(ctx, cv, cx * CHUNK, cy * CHUNK, cv.width, cv.height, ch.bd.r !== 1);
   }
 }
 // is the scenery at world px (X, Y) open water? (for sparkles outside the map)

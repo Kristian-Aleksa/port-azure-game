@@ -12,41 +12,47 @@ function initUI() {
   const ui = $('ui');
   ui.innerHTML = `
   <header class="hud">
-    <section class="card city" aria-label="City">
-      <input id="cityName" class="city-name" value="${esc(G.name)}" maxlength="24" aria-label="City name" spellcheck="false">
-      <div class="lvl"><span class="badge" id="lvlName">Hamlet</span><span><b id="popNum">0</b> residents</span></div>
-      <div class="bar" aria-hidden="true"><i id="popBar"></i></div>
-      <div class="next" id="nextLvl"></div>
+    <section class="card panel city" id="cityPanel" aria-label="City">
+      <div class="ph">
+        <input id="cityName" class="city-name" value="${esc(G.name)}" maxlength="24" aria-label="City name" spellcheck="false">
+        <button class="fold" id="foldCity" aria-controls="cityBody" ${tipAttr('Fold panel', 'Show or hide the city stats.')}>${icon('fold')}</button>
+      </div>
+      <div class="lvl"><span class="badge" id="lvlName">Hamlet</span><span><b id="popNum">0</b> residents</span><span class="mini-happy" id="miniHappy"></span></div>
+      <div class="pb" id="cityBody">
+        <div class="bar" aria-hidden="true"><i id="popBar"></i></div>
+        <div class="next" id="nextLvl"></div>
+        <div class="stats" aria-label="City stats">
+          <div class="stat" ${tipAttr('Happiness', 'Average happiness of residents. Below 45% the town protests; below 40% the docks strike and people start moving out.')}><span class="lab">${icon('smile')} Happiness</span><b id="happyNum">0%</b><div class="meter"><i id="happyBar"></i></div></div>
+          <div class="stat" ${tipAttr('Moving list', 'People waiting to move in. New homes need this many people ready. It only grows while residents are happy.')}><span class="lab">${icon('list')} Moving list</span><b id="listNum">0</b><span class="delta" id="listDelta"></span></div>
+          <div class="stat" ${tipAttr('Harbour load', 'Residents the harbour can serve. Over 100% the ship cannot pay for everyone.')}><span class="lab">${icon('anchor')} Harbour load</span><b id="portNum">0%</b><div class="meter"><i id="portBar"></i></div></div>
+          <div class="stat" ${tipAttr('Delivery trucks', 'Trucks that restock shops each morning: harbour, road tunnel and rail freight. One truck restocks one shop.')}><span class="lab">${icon('truck')} Trucks</span><b id="truckNum">0</b><span class="delta" id="truckDelta"></span></div>
+          <div class="stat" id="tourStat" ${tipAttr('Tourists', 'Day visitors arriving on your intercity routes, and hotel guests staying the night.')}><span class="lab">${icon('camera')} Tourists</span><b id="tourNum">0</b><span class="delta" id="tourDelta"></span></div>
+          <div class="stat" id="f1Stat" hidden ${tipAttr('Grand Prix', 'Days until the next race on your circuit.')}><span class="lab">${icon('flag')} Grand Prix</span><b id="f1Num">-</b></div>
+          <div class="links" id="links"></div>
+        </div>
+      </div>
     </section>
     <section class="card clock" aria-label="Time and weather">
       <div class="row"><span class="day">Day <b id="dayNum">1</b></span><span class="time" id="clockTime">06:00</span><span class="wx" id="wx"></span></div>
       <div class="row speeds" role="group" aria-label="Game speed">
-        <button id="sp0" ${tipAttr('Pause', 'Stop the clock. You can still build.', 'Space')}>${icon('pause')}</button>
-        <button id="sp1" ${tipAttr('Normal speed', 'A day lasts about a minute.', ',')}>${icon('play')}</button>
-        <button id="sp2" ${tipAttr('Fast', 'Twice as fast.')}>${icon('fast')}</button>
-        <button id="sp3" ${tipAttr('Fastest', 'Four times as fast.', '.')}>${icon('faster')}</button>
+        <button id="btnPause" ${tipAttr('Pause', 'Stop the clock. You can still build.', 'Space')}>${icon('pause')}</button>
+        <button id="btnSpeed" class="speed" ${tipAttr('Game speed', 'Click to switch between normal, fast and fastest.', ', / .')}><span id="speedIco">${icon('play')}</span><b id="speedLab">1×</b></button>
         <span class="ship" id="shipEta"></span>
       </div>
+      <button class="clock-menu" id="btnMenuTop" ${tipAttr('Menu', 'Save, load, finances, settings and help.', 'Esc')}>${icon('menu')}<span>Menu</span></button>
     </section>
-    <section class="card money" aria-label="Treasury" id="moneyCard" ${tipAttr('Treasury', 'Click for the finances: income, costs, loans and taxes.', 'F')}>
-      <div class="cash" id="money">$0</div>
-      <div class="sub" id="moneySub">&nbsp;</div>
+    <section class="card panel side" id="sidePanel" aria-label="Treasury and town news">
+      <div class="ph money" id="moneyCard" ${tipAttr('Treasury', 'Click for the finances: income, costs, loans and taxes.', 'F')}>
+        <div class="cash-wrap"><div class="cash" id="money">$0</div><div class="sub" id="moneySub">&nbsp;</div></div>
+        <button class="fold" id="foldSide" aria-controls="sideBody" ${tipAttr('Fold panel', 'Show or hide town talk and the harbourmaster\'s notes.')}>${icon('fold')}</button>
+      </div>
+      <section class="petition" id="petition" hidden aria-live="polite"></section>
+      <div class="pb" id="sideBody">
+        <section class="talk" aria-label="Town talk"><h2>Town talk</h2><ul id="talk"></ul></section>
+        <section class="goals" aria-label="Goals"><h2>Harbourmaster's notes</h2><div id="goal"></div></section>
+      </div>
     </section>
   </header>
-  <section class="card stats" aria-label="City stats">
-    <div class="stat" ${tipAttr('Happiness', 'Average happiness of residents. Below 45% the town protests; below 40% the docks strike and people start moving out.')}><span class="lab">${icon('smile')} Happiness</span><b id="happyNum">0%</b><div class="meter"><i id="happyBar"></i></div></div>
-    <div class="stat" ${tipAttr('Moving list', 'People waiting to move in. New homes need this many people ready. It only grows while residents are happy.')}><span class="lab">${icon('list')} Moving list</span><b id="listNum">0</b><span class="delta" id="listDelta"></span></div>
-    <div class="stat" ${tipAttr('Harbour load', 'Residents the harbour can serve. Over 100% the ship cannot pay for everyone.')}><span class="lab">${icon('anchor')} Harbour load</span><b id="portNum">0%</b><div class="meter"><i id="portBar"></i></div></div>
-    <div class="stat" ${tipAttr('Delivery trucks', 'Trucks that restock shops each morning: harbour, road tunnel and rail freight. One truck restocks one shop.')}><span class="lab">${icon('truck')} Trucks</span><b id="truckNum">0</b><span class="delta" id="truckDelta"></span></div>
-    <div class="stat" id="tourStat" ${tipAttr('Tourists', 'Day visitors arriving on your intercity routes, and hotel guests staying the night.')}><span class="lab">${icon('camera')} Tourists</span><b id="tourNum">0</b><span class="delta" id="tourDelta"></span></div>
-    <div class="stat" id="f1Stat" hidden ${tipAttr('Grand Prix', 'Days until the next race on your circuit.')}><span class="lab">${icon('flag')} Grand Prix</span><b id="f1Num">-</b></div>
-    <div class="links" id="links"></div>
-  </section>
-  <aside class="side">
-    <section class="card petition" id="petition" hidden aria-live="polite"></section>
-    <section class="card talk" aria-label="Town talk"><h2>Town talk</h2><ul id="talk"></ul></section>
-    <section class="card goals" aria-label="Goals"><h2>Harbourmaster's notes</h2><div id="goal"></div></section>
-  </aside>
   <section class="card info" id="info" hidden aria-live="polite"></section>
   <nav class="dock" aria-label="Build">
     <div class="drawer" id="drawer" hidden></div>
@@ -81,7 +87,13 @@ function initUI() {
 
   $('cityName').addEventListener('change', (e) => { G.name = e.target.value.trim() || 'Port Azur'; });
   $('cityName').addEventListener('keydown', (e) => { if (e.key === 'Enter') e.target.blur(); });
-  for (let i = 0; i < 4; i++) $('sp' + i).addEventListener('click', () => uiSetSpeed(i));
+  $('btnPause').addEventListener('click', () => uiSetSpeed(G.speed ? 0 : (IN.lastSpeed || 1)));
+  // one button for the three speeds: normal, fast, fastest, round again (and it starts a paused clock)
+  $('btnSpeed').addEventListener('click', () => uiSetSpeed(G.speed ? G.speed % 3 + 1 : (IN.lastSpeed || 1)));
+  $('btnMenuTop').addEventListener('click', () => uiOpenMenu());
+  // the two side panels fold away; how they were left is remembered
+  initFold('foldCity', 'cityPanel', 'city');
+  initFold('foldSide', 'sidePanel', 'side');
   document.querySelectorAll('.cat').forEach((b) => b.addEventListener('click', () => uiOpenDrawer(b.dataset.cat, true)));
   document.querySelectorAll('.tool').forEach((b) => b.addEventListener('click', () => { uiCloseDrawer(); setTool(b.dataset.tool); }));
   $('btnRotate').addEventListener('click', rotateView);
@@ -91,7 +103,7 @@ function initUI() {
   $('btnHappy').addEventListener('click', () => uiToggleOverlay('happy'));
   $('btnTransit').addEventListener('click', () => uiToggleOverlay('transit'));
   $('btnMenu').addEventListener('click', () => uiOpenMenu());
-  $('moneyCard').addEventListener('click', () => uiOpenMenu('finance'));
+  $('moneyCard').addEventListener('click', (e) => { if (!e.target.closest('.fold')) uiOpenMenu('finance'); });
   initTooltips();
   bindEvents();
   uiSetSpeed(G.speed);
@@ -115,7 +127,7 @@ function bindEvents() {
   on('built', (b) => { addFx({ kind: 'dust', x: b.x, y: b.y, seed: 1, life: 700 }); if (HOUSING.has(b.type)) addFx({ kind: 'text', x: b.x + 0.5, y: b.y + 0.5, text: `+${b.res} residents`, color: '#9fe8ff', size: 20, h: 50 }); });
   on('abandon', (b) => { uiToast(`The last residents left a ${B[b.type].name}. The plot is empty again.`, 'bad'); sfx('bad'); addFx({ kind: 'dust', x: b.x, y: b.y, seed: 2, life: 1200 }); });
   on('moveout', (d) => addFx({ kind: 'text', x: d.b.x + 0.5, y: d.b.y + 0.5, text: `-${d.n} moved away`, color: '#ff8a6a', size: 18, h: 50, life: 3000 }));
-  on('weather', (w) => { if (w === 'heat') uiToast('Heatwave! Pools and beach clubs keep their neighbours cool.', 'warn'); if (w === 'storm') uiToast('Storm warning: the ship will be slow and pay less today.', 'warn'); if (w === 'rain') uiToast('A rare rainy day. Residents without a stop nearby are grumpy.', 'warn'); });
+  on('weather', (w) => { if (w === 'heat') uiToast('Heatwave! The beaches will be packed.'); if (w === 'storm') uiToast('Storm warning: the ship will be slow and pay less today.', 'warn'); if (w === 'rain') uiToast('A rare rainy day: fewer tourists will come.', 'warn'); });
   on('strike', () => { uiToast('<b>Dock strike!</b> Unhappy dockers walked out: no harbour trucks today and the ship pays half.', 'bad', 7000); sfx('bad'); });
   on('protest', (p) => { spawnProtest(p); uiToast(`<b>Protest in the streets</b> about ${esc(COMPLAINT_NAME[p.issue] || p.issue)}. Shops sell less today. Fix it: ${esc(FIX[p.issue] || '')}.`, 'bad', 8000); sfx('bad'); centerHint(p.x, p.y); });
   on('unrestWarn', (p) => uiToast(`${p.strike ? 'The dockers vote to strike tomorrow. ' : ''}${p.protest ? 'Residents are organising a protest for tomorrow. ' : ''}Raise happiness to stop it.`, 'bad', 7000));
@@ -171,6 +183,8 @@ function refreshHUD() {
   $('nextLvl').textContent = nx ? `${nx.name} at ${fmtNum(nx.pop)}` : 'Long live the Principality';
   const hp = Math.round(G.happy * 100);
   $('happyNum').textContent = hp + '%';
+  $('miniHappy').innerHTML = `${icon('smile')}${hp}%`;
+  $('miniHappy').dataset.level = hp >= 65 ? 'good' : hp >= 50 ? 'ok' : hp >= 40 ? 'low' : 'bad';
   const hb = $('happyBar'); hb.style.width = hp + '%'; hb.dataset.level = hp >= 65 ? 'good' : hp >= 50 ? 'ok' : hp >= 40 ? 'low' : 'bad';
   $('listNum').textContent = fmtNum(Math.floor(G.movingList));
   $('listDelta').textContent = last ? `${last.listGrowth >= 0 ? '+' : ''}${Math.round(last.listGrowth)}/day` : '';
@@ -223,9 +237,44 @@ function refreshPetition() {
 }
 
 // ---- speed, tools, drawer ------------------------------------------------------------------------------
+const SPEED_UI = [null, ['play', '1×', 'Normal speed', 'A day lasts about a minute.'], ['fast', '2×', 'Fast', 'Twice as fast.'], ['faster', '4×', 'Fastest', 'Four times as fast.']];
 function uiSetSpeed(i) {
   G.speed = i; if (i) IN.lastSpeed = i;
-  for (let k = 0; k < 4; k++) $('sp' + k).classList.toggle('on', k === i);
+  const pb = $('btnPause'), sb = $('btnSpeed');
+  if (!pb) return;
+  const paused = !i, sp = SPEED_UI[i || IN.lastSpeed || 1];
+  pb.innerHTML = icon(paused ? 'play' : 'pause');
+  pb.dataset.tip = paused ? 'Play' : 'Pause';
+  pb.dataset.desc = paused ? 'Start the clock again.' : 'Stop the clock. You can still build.';
+  pb.setAttribute('aria-label', pb.dataset.tip);
+  pb.classList.toggle('on', paused);
+  $('speedIco').innerHTML = icon(sp[0]);
+  $('speedLab').textContent = sp[1];
+  sb.dataset.desc = `${sp[2]}${paused ? ' (paused)' : ''}. ${sp[3]} Click to switch between normal, fast and fastest.`;
+  sb.setAttribute('aria-label', `Game speed: ${sp[2]}`);
+  sb.classList.toggle('on', !paused);
+}
+// fold buttons for the side panels; small screens start with them folded
+const FOLD_KEY = 'portazur.fold';
+function initFold(btnId, panelId, key) {
+  let st = null;
+  try { st = JSON.parse(localStorage.getItem(FOLD_KEY) || 'null'); } catch (e) { /* storage blocked */ }
+  const folded = st && key in st ? st[key] : innerWidth < 860;
+  const set = (f) => {
+    $(panelId).classList.toggle('folded', f);
+    const b = $(btnId);
+    b.innerHTML = icon(f ? 'unfold' : 'fold');
+    b.setAttribute('aria-expanded', String(!f));
+    b.dataset.tip = f ? 'Open panel' : 'Fold panel';
+    b.setAttribute('aria-label', b.dataset.tip);
+  };
+  set(folded);
+  $(btnId).addEventListener('click', (e) => {
+    e.stopPropagation();
+    const f = !$(panelId).classList.contains('folded');
+    set(f); sfx('click');
+    try { const o = JSON.parse(localStorage.getItem(FOLD_KEY) || '{}') || {}; o[key] = f; localStorage.setItem(FOLD_KEY, JSON.stringify(o)); } catch (err) { /* fine */ }
+  });
 }
 function uiToolChanged() {
   const at = $('activeTool');
@@ -267,7 +316,7 @@ function statLine(t) {
   if (d.goods && d.cat === 'shops') return `${Object.keys(d.goods).map(goodsName).join(' + ')} · r${lvAt(d.radius, 1)}`;
   if (d.beds) return `${d.beds[0]} beds · ${fmtMoney(d.rate)}/night`;
   if (d.line) return LINE_KIND[d.line].outside ? `${LINE_KIND[d.line].seats * LINE_KIND[d.line].trips} visitors/day` : `${fmtMoney(LINE_KIND[d.line].run)}/day per vehicle`;
-  if (d.joy) return `+${(lvAt(d.joy, 1) * 6).toFixed(0)} joy · r${lvAt(d.radius, 1)}${d.heat ? ' · cools' : ''}`;
+  if (d.joy) return `+${(lvAt(d.joy, 1) * 6).toFixed(0)} joy · r${lvAt(d.radius, 1)}`;
   if (d.place === 'drag') return 'per tile · drag';
   if (d.place === 'span') return 'per tile · straight';
   if (d.place === 'terra') return 'per plot';
@@ -312,7 +361,7 @@ function thumb(t) {
 const DRAWER_TEXT = {
   housing: 'Homes need people on the moving list and a road on the same level. Each resident pays into the morning ship.',
   shops: 'Shops sell to homes inside their radius (or along a line). Trucks restock one shop each morning. Too few customers and a shop closes.',
-  leisure: 'Each kind helps differently: parks calm crowds, cafés earn, pools cool heatwaves, beach clubs draw tourists but are loud.',
+  leisure: 'Each kind helps differently: parks calm crowds, cafés earn, pools please whole neighbourhoods, beach clubs draw tourists but are loud.',
   landmark: 'The biggest happiness boost in a wide radius, ticket income from visitors, and a big tourist draw. Expensive to run.',
   tourism: 'Build a Tourist Centre, then an intercity route to a stop inside its radius. Hotels let visitors stay the night.',
   transport: 'Drag roads and rails. Stops do nothing until you create a line. Tunnels go through high ground, bridges over low ground.',
@@ -439,7 +488,6 @@ function renderInfo() {
     const fx = [];
     if (d.calm) fx.push('calms crowded streets');
     if (d.cafe) fx.push('earns from residents and tourists nearby');
-    if (d.heat) fx.push('keeps neighbours cool in heatwaves');
     if (d.noise) fx.push('noisy for homes within 2 plots');
     if (d.appeal) fx.push(`tourist appeal ${d.appeal}`);
     if (d.night) fx.push('busy at night');

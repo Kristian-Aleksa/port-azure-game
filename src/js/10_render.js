@@ -123,6 +123,8 @@ function genMountainDecor() {
   const rnd = mulberry32(G.seed * 977 + 5);
   for (let y = 0; y < MAP_H; y++) for (let x = 0; x < MAP_W; x++) {
     if (map.type[y * MAP_W + x] !== T_MOUNT || (G.net[G.idx(x, y)] & N_PORTAL)) continue;
+    // nothing right beside a tunnel mouth
+    if ([map.roadPortal, map.railPortal].some((p) => Math.abs(p.x - x) <= 2 && Math.abs(p.y - y) <= 2)) continue;
     const c = tileCorners(map, x, y), rise = Math.max(...c) - Math.min(...c);
     const d = map.dist[y * MAP_W + x];
     if (rise > 70 || Math.max(...c) > 900) continue;
@@ -163,6 +165,7 @@ function markChunks(box) {
 }
 function flushTouched() {
   if (!G.touched.length) return;
+  clearTreeCache(null);
   for (const [x0, y0, x1, y1] of G.touched) {
     for (let y = Math.max(0, y0); y <= Math.min(MAP_H - 1, y1); y++) for (let x = Math.max(0, x0); x <= Math.min(MAP_W - 1, x1); x++) {
       const k = G.idx(x, y);
@@ -275,7 +278,9 @@ function rebuildStatics() {
     const zc = surfaceZ(x + 0.5, y + 0.5);
     if ((n & N_ROAD) && !(n & N_PORTAL)) {
       const coastal = (G.seaDist[k] || 99) <= 2;
-      const spots = roadTreeSpots(x, y);
+      // no trees or lamps on the road right at a tunnel mouth, where they would hide it
+      const atMouth = [G.map.roadPortal, G.map.railPortal].some((p) => p.x === x && p.y + 1 === y);
+      const spots = atMouth ? [] : roadTreeSpots(x, y);
       for (const [u, v, d] of spots) {
         const lamp = hash2(x, y * 4 + d, 79) < 0.28;
         const o = local(x, y, u, v, zc);
@@ -334,7 +339,7 @@ function computeBounds() {
       x0 = Math.min(x0, X); x1 = Math.max(x1, X); y0 = Math.min(y0, Y); y1 = Math.max(y1, Y);
     }
   }
-  R.bounds = { x0: x0 - 64, x1: x1 + 64, y0: y0 - 260, y1: y1 + 120 };
+  R.bounds = { x0: x0 - 64, x1: x1 + 64, y0: y0 - 480, y1: y1 + 120 };
 }
 function clampCam() { const b = R.bounds; if (!b) return; R.cam.x = clamp(R.cam.x, b.x0, b.x1); R.cam.y = clamp(R.cam.y, b.y0, b.y1); }
 function centerOnTile(x, y) { const [X, Y] = toPx(x, y); R.cam.x = X; R.cam.y = Y - surfaceZ(x, y); clampCam(); }
@@ -563,13 +568,30 @@ function renderChunk(ch, cx, cy) {
     c.drawImage(s.cv, X, Y);
   }
 }
+// Draw a pre-rendered CHUNK-sized canvas (sw x sh source px) at world px (X, Y). Zoomed out
+// (fewer than one screen pixel per world pixel) the chunk lands on whole screen pixels, so two
+// neighbouring chunks meet exactly: drawn at fractional spots their soft edges would both be
+// part-transparent and the sea colour underneath would show through as thin lines.
+function blitChunk(ctx, cv, X, Y, sw, sh, crisp) {
+  const sm = ctx.imageSmoothingEnabled;
+  if (crisp) ctx.imageSmoothingEnabled = false;
+  if (R.S >= 1) ctx.drawImage(cv, 0, 0, sw, sh, X, Y, CHUNK, CHUNK);
+  else {
+    const S = R.S, x0 = Math.round((X - R.vx0) * S), y0 = Math.round((Y - R.vy0) * S);
+    const x1 = Math.round((X + CHUNK - R.vx0) * S), y1 = Math.round((Y + CHUNK - R.vy0) * S);
+    ctx.save(); ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.drawImage(cv, 0, 0, sw, sh, x0, y0, x1 - x0, y1 - y0);
+    ctx.restore();
+  }
+  ctx.imageSmoothingEnabled = sm;
+}
 function drawTerrain(ctx, ox, oy, vw, vh) {
   for (let cy = Math.floor(oy / CHUNK); cy <= Math.floor((oy + vh) / CHUNK); cy++) for (let cx = Math.floor(ox / CHUNK); cx <= Math.floor((ox + vw) / CHUNK); cx++) {
     const key = cx + ',' + cy;
     let ch = R.chunks.get(key);
     if (!ch) { ch = { cv: null, dirty: true }; R.chunks.set(key, ch); }
     if (ch.dirty) renderChunk(ch, cx, cy);
-    if (ch.cv) ctx.drawImage(ch.cv, cx * CHUNK, cy * CHUNK);
+    if (ch.cv) blitChunk(ctx, ch.cv, cx * CHUNK, cy * CHUNK, CHUNK, CHUNK, false);
   }
 }
 
@@ -784,18 +806,35 @@ function drawBubbles(ctx, now) {
   }
 }
 
+// a soft round shadow, faded to nothing at the edge (drawn stretched for each cloud puff)
+let SOFT_BLOB = null;
+function softBlob() {
+  if (SOFT_BLOB) return SOFT_BLOB;
+  const c = document.createElement('canvas'); c.width = c.height = 128;
+  const g = c.getContext('2d'), gr = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+  gr.addColorStop(0, 'rgba(20,32,58,1)'); gr.addColorStop(0.45, 'rgba(20,32,58,0.7)'); gr.addColorStop(1, 'rgba(20,32,58,0)');
+  g.fillStyle = gr; g.fillRect(0, 0, 128, 128);
+  return (SOFT_BLOB = c);
+}
 function drawWeather(ctx, ox, oy, vw, vh, now, minute) {
   const w = G.weather, fx = SETTINGS.weatherFx;
-  const shadows = !fx ? 0 : w === 'cloudy' ? 60 : w === 'rain' || w === 'storm' ? 70 : w === 'sunny' ? 18 : 12;
-  ctx.fillStyle = w === 'rain' || w === 'storm' ? 'rgba(20,30,50,0.10)' : 'rgba(20,30,60,0.07)';
-  const Wd = R.ground.W, Hd = R.ground.H, ts = now / 1000;
+  // cloud shadows drifting over the city: each cloud a few soft puffs, never a hard-edged oval
+  const shadows = !fx ? 0 : w === 'cloudy' ? 34 : w === 'rain' || w === 'storm' ? 40 : w === 'sunny' ? 8 : 6;
+  const Wd = R.ground.W, Hd = R.ground.H, ts = now / 1000, blob = softBlob();
+  ctx.save();
+  ctx.globalAlpha = (w === 'rain' || w === 'storm' ? 0.11 : 0.075) * clamp(R.zoom, 0.6, 1);
   for (let i = 0; i < shadows; i++) {
-    const X = ((hash2(i, 2) * (Wd + 800) + ts * (10 + hash2(i, 1) * 10)) % (Wd + 800)) - 400;
-    const Y = hash2(i, 3) * Hd - 300;
-    const rx = 90 + hash2(i, 4) * 140, ry = 40 + hash2(i, 5) * 50;
-    if (X + rx < ox || X - rx > ox + vw || Y + ry < oy || Y - ry > oy + vh) continue;
-    ctx.beginPath(); ctx.ellipse(X, Y, rx, ry, 0, 0, Math.PI * 2); ctx.fill();
+    const X = ((hash2(i, 2) * (Wd + 1600) + ts * (8 + hash2(i, 1) * 8)) % (Wd + 1600)) - 800;
+    const Y = hash2(i, 3) * (Hd + 400) - 700;
+    const rx = 120 + hash2(i, 4) * 160, ry = 55 + hash2(i, 5) * 55;
+    if (X + rx * 1.6 < ox || X - rx * 1.6 > ox + vw || Y + ry * 1.6 < oy || Y - ry * 1.6 > oy + vh) continue;
+    for (let j = 0; j < 3; j++) {
+      const px = X + (hash2(i, 10 + j) - 0.5) * rx * 1.1, py = Y + (hash2(i, 20 + j) - 0.5) * ry * 0.8;
+      const sx = rx * (0.7 + hash2(i, 30 + j) * 0.5), sy = ry * (0.7 + hash2(i, 40 + j) * 0.5);
+      ctx.drawImage(blob, px - sx, py - sy, sx * 2, sy * 2);
+    }
   }
+  ctx.restore();
   const tint = w === 'storm' ? 'rgba(40,50,70,0.32)' : w === 'rain' ? 'rgba(60,72,92,0.2)' : w === 'cloudy' ? 'rgba(120,128,140,0.12)' : w === 'heat' ? 'rgba(255,170,60,0.10)' : null;
   if (tint) { ctx.fillStyle = tint; ctx.fillRect(ox, oy, vw, vh); }
   const sk = skyTint(minute);
@@ -828,6 +867,7 @@ function drawFloatingText(now) {
     const dpr = R.dpr;
     ctx.globalAlpha = age > 0.7 ? (1 - age) / 0.3 : 1;
     ctx.font = `${Math.round((f.size || 22) * dpr)}px "Jersey 10", "Silkscreen", ui-monospace, monospace`;
+    if ('letterSpacing' in ctx) ctx.letterSpacing = `${Math.round((f.size || 22) * dpr * 0.05)}px`;
     ctx.textAlign = 'center';
     const y = (sy - age * 40) * dpr;
     ctx.fillStyle = 'rgba(20,24,36,0.75)';
@@ -836,4 +876,5 @@ function drawFloatingText(now) {
     ctx.fillText(f.text, sx * dpr, y);
   }
   ctx.globalAlpha = 1;
+  if ('letterSpacing' in ctx) ctx.letterSpacing = '0px';
 }

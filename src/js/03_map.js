@@ -28,7 +28,7 @@ const INLAND_PROFILE = [
 ];
 const START = { portX: PLAY_X0 + 30, portLen: 5 }; // port spans x..x+4 at the bay's back
 
-function genMap(seed) {
+function genMap(seed, ver = MAP_V) {
   const rnd = mulberry32(seed * 7919 + 13);
   const W = MAP_W, H = MAP_H;
   const type = new Uint8Array(W * H).fill(T_SEA);
@@ -70,18 +70,53 @@ function genMap(seed) {
     }
   }
 
-  // tunnel portals at the mountain's edge: road (east of town) and rail (west)
-  const pickPortal = (t0, t1) => {
-    for (let tries = 0; tries < 40; tries++) {
-      const t = t0 + Math.floor(rnd() * (t1 - t0 + 1));
-      const x = PLAY_X0 + t;
+  // tunnel portals at the mountain's edge, where the outside road and railway come in.
+  // Map version 1 (saves from before) kept them in fixed stretches: road east of town, rail west.
+  // From version 2 each new map puts them at random spots along the whole back wall, well apart.
+  let roadPortal, railPortal;
+  if (ver < 2) {
+    const pickPortal = (t0, t1) => {
+      for (let tries = 0; tries < 40; tries++) {
+        const t = t0 + Math.floor(rnd() * (t1 - t0 + 1));
+        const x = PLAY_X0 + t;
+        const y = inland[x];
+        if (inland[x - 1] >= y && inland[x + 1] >= y && type[idx(x, y + 1)] === T_GRASS && type[idx(x, y + 2)] === T_GRASS) return { x, y };
+      }
+      const x = PLAY_X0 + t0; return { x, y: inland[x] };
+    };
+    roadPortal = pickPortal(42, 52);
+    railPortal = pickPortal(8, 18);
+  } else {
+    // a spot works if the mountain flanks it on both sides and there is open ground in front
+    const ok = (x) => {
       const y = inland[x];
-      if (inland[x - 1] >= y && inland[x + 1] >= y && type[idx(x, y + 1)] === T_GRASS && type[idx(x, y + 2)] === T_GRASS) return { x, y };
+      if (inland[x - 1] < y || inland[x + 1] < y) return false;
+      for (let dx = -2; dx <= 2; dx++) for (let dy = 1; dy <= 4; dy++) {
+        const xx = x + dx, yy = Math.max(y, inland[xx]) + dy;
+        if (yy >= H || type[idx(xx, yy)] !== T_GRASS) return false;
+      }
+      return true;
+    };
+    const spots = [];
+    for (let t = 4; t <= 67; t++) if (ok(PLAY_X0 + t)) spots.push(PLAY_X0 + t);
+    const pick = (avoid) => {
+      const list = spots.filter((x) => avoid === null || Math.abs(x - avoid) >= 16);
+      const from = list.length ? list : spots.length ? spots : [PLAY_X0 + 30];
+      const x = from[Math.floor(rnd() * from.length)];
+      return { x, y: inland[x] };
+    };
+    roadPortal = pick(null);
+    railPortal = pick(roadPortal.x);
+  }
+  // Keep each tunnel mouth in plain view: the mountain beside it may not stand further forward
+  // than the portal itself, or it would hide the mouth and the road or track coming out.
+  for (const p of [roadPortal, railPortal]) {
+    for (let x = Math.max(0, p.x - 2); x <= Math.min(W - 1, p.x + 2); x++) {
+      if (inland[x] <= p.y) continue;
+      for (let y = p.y + 1; y <= inland[x]; y++) if (type[idx(x, y)] === T_MOUNT) type[idx(x, y)] = T_GRASS;
+      inland[x] = p.y;
     }
-    const x = PLAY_X0 + t0; return { x, y: inland[x] };
-  };
-  const roadPortal = pickPortal(42, 52);
-  const railPortal = pickPortal(8, 18);
+  }
 
   // ---- terrain heights, on a field that runs well past the map ------------------------------
   // The map is the middle of a larger landscape: the mountain keeps climbing behind it and runs
@@ -150,11 +185,14 @@ function genMap(seed) {
     for (const [i, j] of [[p.x - 1, p.y], [p.x + 2, p.y], [p.x, p.y - 1], [p.x + 1, p.y - 1]]) ehv[(j + PB) * EVW + i + PX] = Math.max(ehv[(j + PB) * EVW + i + PX], PORTAL_H * 0.8);
   }
   // smooth slope field at vertices (normal z, metric) so rock/scrub patches don't follow triangle edges
-  const eslope = new Float32Array(EVW * (EH + 1));
+  // and the smooth surface normal at every vertex, so the mountain is lit as one surface
+  // instead of showing every tile's two flat triangles
+  const eslope = new Float32Array(EVW * (EH + 1)), enx = new Float32Array(EVW * (EH + 1)), eny = new Float32Array(EVW * (EH + 1));
   for (let j = 0; j <= EH; j++) for (let i = 0; i <= EW; i++) {
     const g = (ii, jj) => ehv[clamp(jj, 0, EH) * EVW + clamp(ii, 0, EW)];
     const gx = (g(i + 1, j) - g(i - 1, j)) / 2 / ZK / 16, gy = (g(i, j + 1) - g(i, j - 1)) / 2 / ZK / 16;
-    eslope[j * EVW + i] = 1 / Math.sqrt(1 + gx * gx + gy * gy);
+    const inv = 1 / Math.sqrt(1 + gx * gx + gy * gy);
+    eslope[j * EVW + i] = inv; enx[j * EVW + i] = -gx * inv; eny[j * EVW + i] = -gy * inv;
   }
   // shore distance for water colour (BFS in tiles from land)
   const eshore = new Float32Array(EW * EH).fill(99);
@@ -173,7 +211,7 @@ function genMap(seed) {
   for (let j = 0; j <= H; j++) for (let i = 0; i <= W; i++) { hv[j * VW + i] = ehv[(j + PB) * EVW + i + PX]; slopeV[j * VW + i] = eslope[(j + PB) * EVW + i + PX]; }
   const dist = new Float32Array(W * H), shore = new Float32Array(W * H);
   for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { dist[idx(x, y)] = edist[ex(x, y)]; shore[idx(x, y)] = eshore[ex(x, y)]; }
-  const ext = { PX, PB, EW, EH, type: etype, hv: ehv, slopeV: eslope, shore: eshore, dist: edist };
+  const ext = { PX, PB, EW, EH, type: etype, hv: ehv, slopeV: eslope, nx: enx, ny: eny, shore: eshore, dist: edist };
 
   // decor: harbour breakwater with a lighthouse, moored yachts
   const decor = [];
@@ -194,7 +232,7 @@ function genMap(seed) {
   const yachtSpots = [[PLAY_X0 + 6, 35], [PLAY_X0 + 9, 35], [PLAY_X0 + 55, 31], [PLAY_X0 + 58, 31], [PLAY_X0 + 62, 32]];
   for (const [x, y] of yachtSpots) if (type[idx(x, y)] === T_SEA && rnd() < 0.85) decor.push({ kind: 'yacht', x, y, v: Math.floor(rnd() * 4) });
 
-  return { seed, W, H, type, coast, inland, hv, slopeV, shore, roadPortal, railPortal, decor, PORTAL_H, dist, ext };
+  return { seed, ver, W, H, type, coast, inland, hv, slopeV, shore, roadPortal, railPortal, decor, PORTAL_H, dist, ext };
 }
 
 // per-tile terrain corner heights [nw, ne, se, sw]

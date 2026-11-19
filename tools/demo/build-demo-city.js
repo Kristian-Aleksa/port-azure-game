@@ -4,7 +4,7 @@
 // Larvotto (east), Moneghetti and the Jardin Exotique up the hill.
 (() => {
   const P = __PA, G = P.G, B = P.B;
-  P.newGame(12345, 'Port Azur');
+  P.newGame(12345, 'Port Azur', 1); // map version 1: the demo city's roads and railway lead to these tunnels
   G.money = 1e9; G.level = 7; G.movingList = 1e6;
   const fails = [];
   const K = (x, y) => y * 96 + x;

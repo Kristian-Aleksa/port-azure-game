@@ -450,7 +450,7 @@ function rasterFace(buf, F, ox, oy, seed, opt) {
       if (r === 2) data[idx] = packC(_out);
       else {
         let kk = k * _out[3];
-        if (role === 'L' && Math.abs(s - frontS) < 0.5 && f.h > 4) kk *= 1.1;
+        if (role === 'L' && Math.abs(s - frontS) < 0.5 && f.h > 4 && f.tag !== 'terrain') kk *= 1.1;
         shadeTo(_sh, _out[0], _out[1], _out[2], kk);
         data[idx] = packC(_sh);
       }
