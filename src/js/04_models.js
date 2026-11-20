@@ -20,6 +20,23 @@ const AWNINGS = [['#2e7b59', '#f4efe2'], ['#c2412f', '#f4efe2'], ['#2d5d8e', '#f
 const CAR_COLORS = ['#c7372f', '#2e5c9a', '#e9e4d8', '#2b2f36', '#e3b23c', '#4f8a5b', '#9aa3ad', '#d86f2c'];
 const TERRACOTTA = '#c4643f';
 
+// ---------- player paint ----------------------------------------------------------
+// b.col is an index into PAINTS (0 = the builder's own mix). While a model is built inside
+// withPaint(), paintC() swaps the main facade colour for the chosen one.
+const PAINTS = [null, '#f2d49c', '#efc55e', '#e39a68', '#f0c3a8', '#e98f84', '#ecc6d8', '#d9c6e2', '#a9cbe0', '#97cbb5', '#d5e2cb', '#f4f1ea', '#3c3f46'];
+const PAINT_NAMES = ['Original mix', 'Honey', 'Sunflower', 'Terracotta', 'Peach', 'Coral', 'Rose', 'Lilac', 'Sky', 'Mint', 'Sage', 'Whitewash', 'Charcoal'];
+const PAINTABLE = new Set(['cottage', 'townhouse', 'apartment', 'belle', 'villa', 'tower', 'skyscraper', 'grocer', 'cafe', 'supermarket', 'boutique', 'fashion', 'dept', 'guesthouse', 'hotel']);
+let PAINT_COL = null;
+const paintC = (c) => PAINT_COL || c;
+const rgbHex = (c) => '#' + c.map((x) => clamp(Math.round(x), 0, 255).toString(16).padStart(2, '0')).join('');
+// glass towers take a tinted glass in the chosen colour rather than a flat paint
+const paintGlass = (c) => (PAINT_COL ? rgbHex(mixC(hex(PAINT_COL), [58, 84, 104], 0.3)) : c);
+function withPaint(col, fn) {
+  const prev = PAINT_COL;
+  PAINT_COL = PAINTS[col | 0] || null;
+  try { return fn(); } finally { PAINT_COL = prev; }
+}
+
 const M_LOT = {
   pave: paveMat('#d8ccb6', 2), paveDark: paveMat('#c3b59c', 2), concrete: flat('#cfcac0', 0.06),
   edge: flat('#a69b88'), grass: grassMat(3), sand: flat('#e4d09c', 0.12), wood: stripeMat('#b9875a', '#a4744b', 1),
@@ -111,7 +128,7 @@ function lot(m, top, z = 1, edge = M_LOT.edge) { m.box(0, 0, 0, 16, 16, z, { top
 // ---------- homes ----------------------------------------------------------------
 function mCottage(lv, v) {
   const m = new Model();
-  const fc = FACADES[v % FACADES.length], sh = SHUTTERS[v % 4];
+  const fc = paintC(FACADES[v % FACADES.length]), sh = SHUTTERS[v % 4];
   lot(m, M_LOT.grass);
   m.box(6.8, 12, 1, 2.4, 4, 0.15, M_LOT.pave);
   const w = [9, 10, 11][lv - 1], d = [8, 9, 9][lv - 1], fl = lv === 3 ? 3 : 2;
@@ -136,7 +153,7 @@ function mTownhouse(lv, v) {
   lot(m, M_LOT.pave);
   const base = [3, 4, 5][lv - 1];
   for (let k = 0; k < 3; k++) {
-    const fc = FACADES[(v * 2 + k * 3 + 1) % FACADES.length];
+    const fc = paintC(FACADES[(v * 2 + k * 3 + 1) % FACADES.length]);
     const sh = SHUTTERS[(v + k) % 4];
     const fl = base + (k === 1 ? 1 : 0) - (k === 2 && v % 2 ? 1 : 0);
     const h = 3 + fl * 9;
@@ -151,7 +168,7 @@ function mTownhouse(lv, v) {
 function mApartment(lv, v) {
   const m = new Model();
   // 1960s Riviera block: strong terracotta, coral, sunflower or mint, rails picked out in a contrast colour
-  const fc = ['#e39a68', '#e98f84', '#efc55e', '#97cbb5'][v % 4], rc = ['#2f7f86', '#2d5d8e', '#c2412f', '#d97a2b'][v % 4];
+  const fc = paintC(['#e39a68', '#e98f84', '#efc55e', '#97cbb5'][v % 4]), rc = ['#2f7f86', '#2d5d8e', '#c2412f', '#d97a2b'][v % 4];
   lot(m, M_LOT.pave);
   const fl = [4, 6, 8][lv - 1], fh = 8;
   const h = 3 + fl * fh + 2;
@@ -203,7 +220,7 @@ function addFrenchBalconies(m, x0, x1, y, z0, floors, fh, gap, side) {
 function mBelle(lv, v) {
   const m = new Model();
   // honey, peach, ivory or lilac stucco with crisp white cornices under a blue slate mansard
-  const fc = ['#f2d49c', '#f0c3a8', '#efe6c8', '#d9c6e2'][v % 4];
+  const fc = paintC(['#f2d49c', '#f0c3a8', '#efe6c8', '#d9c6e2'][v % 4]);
   lot(m, M_LOT.paveDark);
   const fl = [5, 7, 9][lv - 1], fh = 9, gh = 11, h = gh + fl * fh + 2;
   const x0 = 1, y0 = 1, w = 14, d = 13.5;
@@ -239,10 +256,10 @@ function mTower(lv, v) {
   addPalm(m, 1.8, 14.2, 1, 0.8, v + 9); addPalm(m, 14.2, 1.8, 1, 0.8, v + 10);
   const fl = [13, 17, 21][lv - 1], fh = 7;
   const x0 = 2.5, y0 = 2.5, w = 11, d = 11, h = 4 + fl * fh;
-  const tint = ['#7fa3b4', '#86a9a3', '#8ba0bf'][v % 3];
-  m.box(x0, y0, 1, w, d, 5, { top: flat('#ede8dd'), side: wallMat('#f3efe6', { floorH: 5, base: 1, groundH: 5, ground: 'shop', shopGlass: '#4d6a7c' }) });
+  const tint = paintGlass(['#7fa3b4', '#86a9a3', '#8ba0bf'][v % 3]);
+  m.box(x0, y0, 1, w, d, 5, { top: flat('#ede8dd'), side: wallMat(paintC('#f3efe6'), { floorH: 5, base: 1, groundH: 5, ground: 'shop', shopGlass: '#4d6a7c' }) });
   m.box(x0 + 0.6, y0 + 0.6, 6, w - 1.2, d - 1.2, h - 5, { top: flatRoofMat('#d9d6cf'), side: glassMat(tint, { floorH: fh, col: 2.2, mullion: '#f1efe8' }) });
-  const slab = { top: flat('#f7f5f0'), side: flat('#ece8e0') }, rail = railingMat('#f7f5f0');
+  const slab = { top: flat('#f7f5f0'), side: flat(paintC('#ece8e0')) }, rail = railingMat('#f7f5f0');
   for (let f = 1; f <= fl; f++) {
     const z = 1 + 4 + f * fh - 1;
     m.box(x0 - 0.8, y0 - 0.8, z, w + 1.6, d + 1.6, 1, slab);
@@ -265,8 +282,8 @@ function mSkyscraper(lv, v) {
   const m = new Model();
   lot(m, M_LOT.paveDark);
   const fl = [26, 32, 38][lv - 1], fh = 6;
-  const tint = ['#5d8fa8', '#4f7f8f', '#6b7fa6'][v % 3];
-  m.box(0.8, 0.8, 1, 14.4, 14.4, 14, { top: flatRoofMat('#cbc6bd'), side: wallMat('#ece5d6', { floorH: 7, base: 1, groundH: 7, ground: 'shop', winH: 4, winW: 2, gap: 2.6, shopGlass: '#3e5566' }) });
+  const tint = paintGlass(['#5d8fa8', '#4f7f8f', '#6b7fa6'][v % 3]);
+  m.box(0.8, 0.8, 1, 14.4, 14.4, 14, { top: flatRoofMat('#cbc6bd'), side: wallMat(paintC('#ece5d6'), { floorH: 7, base: 1, groundH: 7, ground: 'shop', winH: 4, winW: 2, gap: 2.6, shopGlass: '#3e5566' }) });
   const tower = (x, y, s, n, crownC) => {
     const hh = n * fh, z0 = 15;
     m.box(x, y, z0, s, s, hh, { top: flatRoofMat('#cbc6bd'), side: glassMat(tint, { floorH: fh, col: 1.6, mullion: '#e2e7ea' }) });
@@ -297,7 +314,7 @@ function mVilla(lv, v) {
   m.box(1.8, 10.3, 1.05, 7.4, 3.9, 0.3, waterMat());
   const w = [8, 9, 10][lv - 1], fl = lv === 3 ? 3 : 2;
   const x0 = 5, y0 = 1.5, d = 7;
-  const white = '#f4f2ec';
+  const white = paintC('#f4f2ec');
   m.box(x0, y0, 1, w, d, 4 + fl * 9, { top: flatRoofMat('#e7e2d8'), side: wallMat(white, { floorH: 9, base: 3, winH: 6, winW: 2.6, gap: 3.6, glass: '#4b6378' }) });
   m.box(x0 - 2.5, y0 + 1, 1, 2.5, d - 1, 10, { top: flatRoofMat('#e7e2d8'), side: glassMat('#5f7f96', { floorH: 10, col: 2.5 }) });
   m.box(x0 - 2.5, y0 + 1, 11, 2.5, d - 1, 2, { top: null, side: railingMat('#f4f2ec') });
@@ -326,7 +343,7 @@ function signMat(bg, fg) {
 function mGrocer(lv, v) {
   const m = new Model();
   lot(m, M_LOT.pave);
-  const fc = FACADES[(v + 2) % FACADES.length], aw = AWNINGS[v % AWNINGS.length];
+  const fc = paintC(FACADES[(v + 2) % FACADES.length]), aw = AWNINGS[v % AWNINGS.length];
   const fl = [1, 2, 3][lv - 1], gh = 11, fh = 9, h = gh + fl * fh + 1;
   const x0 = 2, y0 = 2.5, w = 12, d = 11;
   const front = wallMat(fc, { floorH: fh, base: 1, groundH: gh, ground: 'shop', shutter: SHUTTERS[v % 4] });
@@ -342,7 +359,7 @@ function mGrocer(lv, v) {
 function mCafe(lv, v) {
   const m = new Model();
   lot(m, M_LOT.paveDark);
-  const fc = FACADES[(v + 5) % FACADES.length], aw = AWNINGS[(v + 1) % AWNINGS.length];
+  const fc = paintC(FACADES[(v + 5) % FACADES.length]), aw = AWNINGS[(v + 1) % AWNINGS.length];
   const fl = [0, 1, 2][lv - 1], gh = 11, fh = 9, h = gh + fl * fh + 1;
   const x0 = 1.5, y0 = 1.5, w = 10, d = 9;
   const front = wallMat(fc, { floorH: fh, base: 1, groundH: gh, ground: 'shop', shutter: SHUTTERS[(v + 2) % 4] });
@@ -368,13 +385,14 @@ function mSupermarket(lv, v) {
   const m = new Model();
   lot(m, M_LOT.asphalt);
   const w = 15, d = [10, 11, 12][lv - 1], h = [15, 17, 24][lv - 1];
-  const sc = ['#2f7a4f', '#d7372f', '#2d5d8e'][v % 3];
+  const sc = paintC(['#2f7a4f', '#d7372f', '#2d5d8e'][v % 3]), wc = hex('#e1dcd2');
+  const scC = hex(sc), lt = scC[0] * 0.3 + scC[1] * 0.55 + scC[2] * 0.15 > 165 ? [44, 48, 56] : [247, 241, 227];
   const front = mat((s, t, f, o) => {
-    if (t > f.h - 5.5) { const c = hex(sc); o[0] = c[0]; o[1] = c[1]; o[2] = c[2]; if (t < f.h - 1.2 && t > f.h - 4.5 && s > 2 && s < f.w - 2 && (Math.floor(s * 1.4) % 3) !== 2) { o[0] = 247; o[1] = 241; o[2] = 227; } return f.night ? 2 : 1; }
+    if (t > f.h - 5.5) { const c = scC; o[0] = c[0]; o[1] = c[1]; o[2] = c[2]; if (t < f.h - 1.2 && t > f.h - 4.5 && s > 2 && s < f.w - 2 && (Math.floor(s * 1.4) % 3) !== 2) { o[0] = lt[0]; o[1] = lt[1]; o[2] = lt[2]; } return f.night ? 2 : 1; }
     if (t > 1 && t < f.h - 7 && (s % 3) > 0.4) { o[0] = 96; o[1] = 120; o[2] = 140; o[3] = 1.05; return 1; }
-    o[0] = 225; o[1] = 220; o[2] = 210; return 1;
+    o[0] = wc[0]; o[1] = wc[1]; o[2] = wc[2]; return 1;
   });
-  m.box(0.5, 0.5, 1, w, d, h, { top: flatRoofMat('#c9c4ba'), side: wallMat('#e3ddd2', { floorH: 99, base: 99 }), py: front, px: front });
+  m.box(0.5, 0.5, 1, w, d, h, { top: flatRoofMat('#c9c4ba'), side: wallMat(paintC('#e3ddd2'), { floorH: 99, base: 99 }), py: front, px: front });
   m.box(3, 3, 1 + h, 2, 2, 1.5, flat('#a9adb0'));
   m.box(8, 4, 1 + h, 3, 2, 1.5, flat('#a9adb0'));
   // parking lines and a parked car
@@ -397,7 +415,7 @@ function mBoutique(lv, v) {
   const m = new Model();
   lot(m, paveMat('#e6e0d4', 1.5));
   // a little pastel shop front with striped awnings and a gilded sign
-  const fc = ['#ecc6d8', '#c4e0d4', '#dccbec', '#f2d2b0'][v % 4];
+  const fc = paintC(['#ecc6d8', '#c4e0d4', '#dccbec', '#f2d2b0'][v % 4]);
   const fl = [2, 3, 4][lv - 1], gh = 11, fh = 10, h = gh + fl * fh + 2;
   const x0 = 2, y0 = 2, w = 12, d = 11;
   const front = wallMat(fc, { floorH: fh, base: 1, groundH: gh, ground: 'shop', winH: 7, winW: 1.6, gap: 3, bands: true, shopGlass: '#3a4450' });
@@ -414,7 +432,7 @@ function mDept(lv, v) {
   lot(m, M_LOT.paveDark);
   const fl = [4, 5, 6][lv - 1], gh = 12, fh = 10, h = gh + fl * fh + 3;
   // grand sandstone store with a copper dome and red banners
-  const fc = ['#e2c592', '#d8b58a'][v % 2];
+  const fc = paintC(['#e2c592', '#d8b58a'][v % 2]);
   const wall = wallMat(fc, { floorH: fh, base: 1, groundH: gh, ground: 'arcade', winH: 7, winW: 1.8, gap: 2.6, bands: true });
   m.box(0.6, 0.6, 1, 14.8, 14.8, h, { top: flatRoofMat('#cbc2b2'), side: wall });
   m.blob(8, 8, 1 + h + 1, 4.5, 7.5, mat((nx, ny, nz, P, o) => {
@@ -477,7 +495,7 @@ function mFashion(lv, v) {
   const m = new Model();
   lot(m, paveMat('#e8e2d6', 1.5));
   // luxury house: charcoal, oxblood or midnight stone with gold cornices and awnings
-  const fc = ['#34343a', '#4a2f2e', '#26323f'][v % 3];
+  const fc = paintC(['#34343a', '#4a2f2e', '#26323f'][v % 3]);
   const fl = [3, 4, 5][lv - 1], gh = 12, fh = 10, h = gh + fl * fh + 2;
   const x0 = 1.5, y0 = 1.5, w = 13, d = 12;
   const front = belleMat(fc, { floorH: fh, groundH: gh, ground: 'shop', winH: 7, winW: 1.6, gap: 3, shopGlass: '#2f3540', bands: true });
@@ -942,7 +960,7 @@ function mGuesthouse(lv, v) {
   const m = new Model();
   lot(m, M_LOT.grass);
   // a seaside pension: sky blue, aqua or lavender walls with white shutters
-  const fc = ['#a9cbe0', '#9fd3cc', '#c4bde0', '#b6d6ea'][v % 4], sh = ['#f4f1ea', '#f4f1ea', '#f4f1ea'][v % 3];
+  const fc = paintC(['#a9cbe0', '#9fd3cc', '#c4bde0', '#b6d6ea'][v % 4]), sh = ['#f4f1ea', '#f4f1ea', '#f4f1ea'][v % 3];
   const fl = [3, 4, 5][lv - 1], h = 3 + fl * 9;
   m.box(2, 2, 1, 12, 9, h, { top: flat(fc), side: wallMat(fc, { floorH: 9, base: 3, shutter: sh, gap: 2.6 }), py: wallMat(fc, { floorH: 9, base: 3, shutter: sh, gap: 2.6, door: true }) });
   m.hip(2, 2, 1 + h, 12, 9, 6, roofTileMat(TERRACOTTA));
@@ -958,7 +976,7 @@ function mHotel(lv, v) {
   // 2x1: Belle Époque grand hotel with corner domes, a canopy and a red carpet
   const m = new Model(16, 8);
   lotN(m, 2, 1, paveMat('#e6dcc6', 1.6));
-  const fc = '#f1e6cc';
+  const fc = paintC('#f1e6cc');
   const fl = [5, 6, 7][lv - 1], fh = 9, gh = 11, h = gh + fl * fh + 2;
   const wall = belleMat(fc, { floorH: fh, groundH: gh, winH: 6, winW: 1.3, gap: 2.6 });
   m.box(1, 1, 1, 30, 11, h, { top: flatRoofMat('#cfc6b4'), side: wall });

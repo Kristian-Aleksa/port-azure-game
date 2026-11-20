@@ -90,16 +90,18 @@ function buildingSprite(b, part, lit) {
     const top = Math.min(120, Math.round(modelTop(b.type, 1) / 10) * 10);
     return sprite(`site|${stage}|${top}`, () => mSite(stage, top), QA(q));
   }
-  const v = b.v % VAR;
+  const v = b.v % VAR, col = b.col | 0;
+  const C = col ? `|c${col}` : '';
+  const build = () => withPaint(col, () => MODEL_FN[b.type](b.lv, v));
   if (multi) {
     const i = part % w, j = (part / w) | 0;
-    const key = `${b.type}|${b.lv}|${v}|${q}|p${i}.${j}`;
-    if (lit) return sprite(key + '|L', () => MODEL_FN[b.type](b.lv, v), QA(q), { seed: v * 13 + 1, night: true, lightsOnly: true, part: [i, j, w, h] });
-    return sprite(key, () => MODEL_FN[b.type](b.lv, v), QA(q), { seed: v * 13 + 1, keepData: true, part: [i, j, w, h] });
+    const key = `${b.type}|${b.lv}|${v}|${q}|p${i}.${j}${C}`;
+    if (lit) return sprite(key + '|L', build, QA(q), { seed: v * 13 + 1, night: true, lightsOnly: true, part: [i, j, w, h] });
+    return sprite(key, build, QA(q), { seed: v * 13 + 1, keepData: true, part: [i, j, w, h] });
   }
-  const key = `${b.type}|${b.lv}|${v}|${q}`;
-  if (lit) return b.closed ? null : sprite(key + '|L', () => MODEL_FN[b.type](b.lv, v), QA(q), { seed: v * 13 + 1, night: true, lightsOnly: true });
-  const s = sprite(key, () => MODEL_FN[b.type](b.lv, v), QA(q), { seed: v * 13 + 1, keepData: true });
+  const key = `${b.type}|${b.lv}|${v}|${q}${C}`;
+  if (lit) return b.closed ? null : sprite(key + '|L', build, QA(q), { seed: v * 13 + 1, night: true, lightsOnly: true });
+  const s = sprite(key, build, QA(q), { seed: v * 13 + 1, keepData: true });
   return b.closed ? greySprite(s, key + '|grey') : s;
 }
 function treeSprite(kind, v) {

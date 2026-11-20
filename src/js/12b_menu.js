@@ -257,7 +257,7 @@ function closeTitle() {
   $('cityName').value = G.name;
   uiSetSpeed(1); sfx('click');
   UI.goalKey = null;
-  refreshHUD(); refreshTalk(); checkGoals();
+  refreshHUD(); refreshTalk();
 }
 function showGameOver() {
   uiSetSpeed(0);

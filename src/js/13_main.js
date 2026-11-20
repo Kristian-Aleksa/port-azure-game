@@ -25,7 +25,7 @@ function tickGame(dt, now) {
 // ---- persistence ---------------------------------------------------------------------------------
 function rle(arr) { const out = []; let i = 0; while (i < arr.length) { const v = arr[i]; let n = 1; while (i + n < arr.length && arr[i + n] === v) n++; out.push(v, n); i += n; } return out; }
 function unrle(a, len, Type = Uint8Array) { const out = new Type(len); let p = 0; for (let i = 0; i < a.length; i += 2) { out.fill(a[i], p, p + a[i + 1]); p += a[i + 1]; } return out; }
-const BF = ['id', 'type', 'x', 'y', 'lv', 'v', 'facing', 'done', 'doneAt', 'res', 'stock', 'sat', 'plv', 'lowDays', 'reserved', 'closed', 'idleDays', 'leftUntil', 'guests'];
+const BF = ['id', 'type', 'x', 'y', 'lv', 'v', 'facing', 'done', 'doneAt', 'res', 'stock', 'sat', 'plv', 'lowDays', 'reserved', 'closed', 'idleDays', 'leftUntil', 'guests', 'col'];
 const round2 = (o) => { const r = {}; for (const k in o || {}) r[k] = Math.round(o[k] * 100) / 100; return r; };
 function serialize() {
   return {
@@ -173,7 +173,7 @@ function boot() {
   document.addEventListener('visibilitychange', () => { if (document.hidden) saveGame('auto'); });
   initCloud();
   try { window.claude && window.claude.hot && window.claude.hot.snapshot && window.claude.hot.snapshot(() => (G.started ? serialize() : {})); } catch (e) { /* not in the viewer */ }
-  window.__PA = { G, R, B, NET, AG, IN, SAVES, renderBackdrop, BD, GOALS, addBuilding, newGame, placeBuilding, placeDrag, planDrag, linePath, setView, centerOnTile, advance, recomputeAll, render, canPlace, upgrade, demolish, startNewCity, loadGame, serialize, saveGame, closeTitle, setTool, rotateView, zoomAt, updateHover, terra, canTerra, buildSpan, planSpan, createLine, buyLicence, buildCircuit, lineVehicles, MODEL_FN, renderModel, takeLoan, repayLoan, takeAd, dropJob, paperEnsure, uiOpenPaper, uiOpenFinance, finishDraft, uiOpenMenu, uiCloseModal, emit, select, updateOverlay, uiOpenDrawer, uiCloseDrawer, uiToggleRanges, uiToggleOverlay, uiToast, tileToScreen: (x, y) => worldPxToScreen(...(() => { const [X, Y] = toPx(x + 0.5, y + 0.5); return [X, Y - surfaceZ(x + 0.5, y + 0.5)]; })()) };
+  window.__PA = { G, R, B, NET, AG, IN, SAVES, renderBackdrop, BD, addBuilding, repaint, paintCost, PAINTS, PAINTABLE, buildPaint, withPaint, UI, newGame, placeBuilding, placeDrag, planDrag, linePath, setView, centerOnTile, advance, recomputeAll, render, canPlace, upgrade, demolish, startNewCity, loadGame, serialize, saveGame, closeTitle, setTool, rotateView, zoomAt, updateHover, terra, canTerra, buildSpan, planSpan, createLine, buyLicence, buildCircuit, lineVehicles, MODEL_FN, renderModel, takeLoan, repayLoan, takeAd, dropJob, paperEnsure, uiOpenPaper, uiOpenFinance, finishDraft, uiOpenMenu, uiCloseModal, emit, select, updateOverlay, uiOpenDrawer, uiCloseDrawer, uiToggleRanges, uiToggleOverlay, uiToast, tileToScreen: (x, y) => worldPxToScreen(...(() => { const [X, Y] = toPx(x + 0.5, y + 0.5); return [X, Y - surfaceZ(x + 0.5, y + 0.5)]; })()) };
   window.__PA_READY = true;
   requestAnimationFrame(frame);
 }

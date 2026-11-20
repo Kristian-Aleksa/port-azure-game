@@ -53,9 +53,11 @@ function ghostSprites(type, x, y) {
   if (type === 'port') return footprint('port', x, y).filter(([a, b]) => G.inMap(a, b)).map(([a, b], i) => ({ x: a + 0.5, y: b + 0.5, z: 0, s: sprite(`port|${i}|0|${G.view & 3}`, () => mPort(i, 0), QA(FACE_Q[2] + G.view)) }));
   if (!MODEL_FN[type]) return [];
   const [w, h] = sizeOf(type);
-  if (w * h > 1) return [{ x: x + w / 2, y: y + h / 2, z, s: sprite(`${type}|1|0|${G.view & 3}|ghost`, () => MODEL_FN[type](1, 0), QA(G.view), { seed: 1 }) }];
+  const col = buildPaint(type), C = col ? `|c${col}` : '';
+  const build = () => withPaint(col, () => MODEL_FN[type](1, 0));
+  if (w * h > 1) return [{ x: x + w / 2, y: y + h / 2, z, s: sprite(`${type}|1|0|${G.view & 3}|ghost${C}`, build, QA(G.view), { seed: 1 }) }];
   const q = (FACE_Q[chooseFacing(type, x, y)] + G.view) & 3;
-  return [{ x: x + 0.5, y: y + 0.5, z, s: sprite(`${type}|1|0|${q}`, () => MODEL_FN[type](1, 0), QA(q), { seed: 1, keepData: true }) }];
+  return [{ x: x + 0.5, y: y + 0.5, z, s: sprite(`${type}|1|0|${q}${C}`, build, QA(q), { seed: 1, keepData: true }) }];
 }
 const rectTiles = (x0, y0, x1, y1) => { const out = []; for (let y = Math.min(y0, y1); y <= Math.max(y0, y1); y++) for (let x = Math.min(x0, x1); x <= Math.max(x0, x1); x++) out.push([x, y]); return out; };
 function stopAt(kind, x, y) {
@@ -240,7 +242,7 @@ function actAt(x, y) {
     const t = IN.type, pl = placeOf(t);
     if (pl === 'line') { lineClick(x, y); updateHover(); return; }
     if (pl === 'drag' || pl === 'span' || pl === 'terra') return;
-    const r = placeBuilding(t, x, y);
+    const r = placeBuilding(t, x, y, buildPaint(t));
     if (!r.ok) return fail(r.why);
     if (r.b) { addFx({ kind: 'dust', x, y, seed: Math.random() * 6, life: 900 }); r.b.flash = performance.now(); }
     sfx('build');

@@ -5,6 +5,8 @@ An isometric pixel-art city builder for the browser. Build a harbour city on a M
 ![The demo city, from Fontvieille to Larvotto](docs/screenshot.jpg)
 
 - Housing, shops (groceries, clothes, utilities), leisure and landmarks, each with its own range
+- Pick a colour for homes, shops and hotels when you build them, or repaint them later
+- The Town paper: cash-reward jobs that pay more as the town grows, plus bank loans
 - Supply trucks every morning, shops that sell out or close, protests and dock strikes
 - Terrain you can raise and lower, ramps, road and rail tunnels and bridges
 - Bus and train lines you plan yourself, plus intercity routes that bring in tourists

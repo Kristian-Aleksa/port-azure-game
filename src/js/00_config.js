@@ -229,7 +229,7 @@ const LINE_KIND = {
 
 const UPGRADE_LVL = [0, 2, 3];
 const UPGRADE_COST = [0, 0.6, 1.2];
-const MOVE_FEE = 0.25, DEMOLISH_FEE = 0.1;
+const MOVE_FEE = 0.25, DEMOLISH_FEE = 0.1, PAINT_FEE = 0.05;
 
 const WEATHER = {
   // weather sways the ship and the tourists, but not the residents' happiness
