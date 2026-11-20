@@ -6,7 +6,7 @@ const G = {
   buildings: new Map(), nextId: 1, busStops: new Map(),
   spans: new Map(), spanTile: new Map(), spanEnd: new Map(), nextSpan: 1,
   lines: new Map(), nextLine: 1, circuit: null,
-  view: 0, money: 0, loan: 0, debtDays: 0, tax: 'normal',
+  view: 0, money: 0, loans: [], debtDays: 0, tax: 'normal',
   t: 0, speed: 1, movingList: 0, pop: 0, effPop: 0, happy: 0.7, level: 0,
   weather: 'sunny', forecast: 'sunny', unhappyDays: 0, buzz: 0, strike: false, protest: null,
   links: { road: false, rail: false },
@@ -99,7 +99,7 @@ function newGame(seed, name, mapV = MAP_V) {
   G.buildings = new Map(); G.nextId = 1; G.busStops = new Map();
   G.spans = new Map(); G.spanTile = new Map(); G.spanEnd = new Map(); G.nextSpan = 1;
   G.lines = new Map(); G.nextLine = 1; G.circuit = null;
-  G.money = ECON.start; G.loan = 0; G.debtDays = 0; G.tax = 'normal';
+  G.money = ECON.start; G.loans = []; G.debtDays = 0; G.tax = 'normal'; G.paper = null;
   G.t = 5 * 60 + 40; G.speed = 1; G.movingList = 20; G.level = 0;
   G.weather = 'sunny'; G.forecast = 'sunny'; G.unhappyDays = 0; G.buzz = 0; G.strike = false; G.protest = null;
   G.history = []; G.goals = {}; G.stats = { built: 0, races: 0 }; G.over = false;
@@ -471,6 +471,7 @@ function placeBuilding(type, x, y) {
   if (!r.ok) return r;
   if (type === 'busstop') {
     spend(r.cost); G.busStops.set(G.idx(x, y), { side: busSide(x, y) }); G.net[G.idx(x, y)] |= N_BUS;
+    paperBuilt('busstop');
     touch(x - 2, y - 2, x + 2, y + 2);
     G.dirtyNet = true; G.dirtyHappy = true; G.rev++;
     return { ok: true, tiles: [[x, y]] };
@@ -593,16 +594,36 @@ function buyLicence() {
   return { ok: true };
 }
 
-function maxLoan() { return LEVELS[G.level].loan; }
-function borrow() {
-  if (G.loan + ECON.loanStep > maxLoan()) return { ok: false, why: `The bank lends at most ${fmtMoney(maxLoan())} at ${LEVELS[G.level].name} level` };
-  G.loan += ECON.loanStep; G.money += ECON.loanStep;
-  return { ok: true };
+// ---- bank loans: interest every evening until paid off; one of each kind, two at most ----
+const loanDef = (id) => LOANS.find((l) => l.id === id);
+function loanOwed() { return G.loans.reduce((a, l) => a + l.owed, 0); }
+function loanInterest() { return G.loans.reduce((a, l) => a + Math.round(l.owed * l.rate), 0); }
+// why a loan cannot be taken right now (or '' if it can)
+function loanBlock(id) {
+  const d = loanDef(id);
+  if (!d) return 'No such loan';
+  if (G.level < d.lvl) return `Unlocks at ${LEVELS[d.lvl].name} (${fmtNum(LEVELS[d.lvl].pop)} residents)`;
+  if (G.loans.some((l) => l.id === id)) return 'Already taken: pay it off to borrow it again';
+  if (G.loans.length >= MAX_LOANS) return `At most ${MAX_LOANS} loans at once: pay one off first`;
+  return '';
 }
-function repay() {
-  if (G.loan <= 0) return { ok: false, why: 'No loan to repay' };
-  const n = Math.min(ECON.loanStep, G.loan);
+function takeLoan(id) {
+  const why = loanBlock(id);
+  if (why) return { ok: false, why };
+  const d = loanDef(id);
+  G.loans.push({ id, owed: d.amount, rate: d.rate, day: G.day() });
+  G.money += d.amount;
+  G.dirtyHappy = true;
+  return { ok: true, amount: d.amount };
+}
+// pay back part of a loan (a quarter of its size), or all of it with full = true
+function repayLoan(id, full) {
+  const l = G.loans.find((x) => x.id === id);
+  if (!l) return { ok: false, why: 'No such loan' };
+  const d = loanDef(id), step = d ? Math.ceil(d.amount / 4) : l.owed;
+  const n = full ? l.owed : Math.min(step, l.owed);
   if (G.money < n) return { ok: false, why: `Needs ${fmtMoney(n)} in the bank` };
-  G.loan -= n; G.money -= n;
-  return { ok: true };
+  G.money -= n; l.owed -= n;
+  if (l.owed <= 0) G.loans = G.loans.filter((x) => x !== l);
+  return { ok: true, paid: n, cleared: l.owed <= 0 };
 }

@@ -150,14 +150,15 @@ function mTownhouse(lv, v) {
 
 function mApartment(lv, v) {
   const m = new Model();
-  const fc = ['#e6b57a', '#e9a88e', '#efe0c2', '#f0d58e'][v % 4];
+  // 1960s Riviera block: strong terracotta, coral, sunflower or mint, rails picked out in a contrast colour
+  const fc = ['#e39a68', '#e98f84', '#efc55e', '#97cbb5'][v % 4], rc = ['#2f7f86', '#2d5d8e', '#c2412f', '#d97a2b'][v % 4];
   lot(m, M_LOT.pave);
   const fl = [4, 6, 8][lv - 1], fh = 8;
   const h = 3 + fl * fh + 2;
   const x0 = 1.5, y0 = 1.8, w = 13, d = 11.5;
   const wall = wallMat(fc, { floorH: fh, base: 3, winH: 4, gap: 2.6, winW: 1.4, shutter: SHUTTERS[(v + 1) % 4] });
   m.box(x0, y0, 1, w, d, h, { top: flatRoofMat('#cfc6b6'), side: wall, py: wallMat(fc, { floorH: fh, base: 3, winH: 4, gap: 2.6, winW: 1.4, door: true, shutter: SHUTTERS[(v + 1) % 4] }) });
-  const rail = railingMat('#f4f1ea'), slab = { top: flat('#f2eee6'), side: flat('#e4ddd0') };
+  const rail = railingMat(rc), slab = { top: flat('#f2eee6'), side: flat('#e4ddd0') };
   for (let f = 1; f < fl; f++) {
     const z = 1 + 3 + f * fh;
     m.box(x0 + 1, y0 + d, z, w - 2, 1.4, 1, slab);
@@ -201,19 +202,20 @@ function addFrenchBalconies(m, x0, x1, y, z0, floors, fh, gap, side) {
 }
 function mBelle(lv, v) {
   const m = new Model();
-  const fc = ['#efe3c8', '#ead2b3', '#f2ddc9', '#e9e3d3'][v % 4];
+  // honey, peach, ivory or lilac stucco with crisp white cornices under a blue slate mansard
+  const fc = ['#f2d49c', '#f0c3a8', '#efe6c8', '#d9c6e2'][v % 4];
   lot(m, M_LOT.paveDark);
   const fl = [5, 7, 9][lv - 1], fh = 9, gh = 11, h = gh + fl * fh + 2;
   const x0 = 1, y0 = 1, w = 14, d = 13.5;
   const wall = belleMat(fc, { floorH: fh, groundH: gh, winH: 6, winW: 1.3, gap: 2.4 });
   m.box(x0, y0, 1, w, d, h, { top: flatRoofMat('#bfb6a7'), side: wall });
-  const corn = { top: flat(fc), side: flat(mixHex(fc, 0.9)) };
+  const corn = { top: flat('#f8f4ea'), side: flat('#e9e2d2') };
   m.box(x0 - 0.4, y0 - 0.4, 1 + h - 1.4, w + 0.8, d + 0.8, 1.4, corn);
   m.box(x0 - 0.2, y0 - 0.2, 1 + gh - 0.6, w + 0.4, d + 0.4, 0.8, corn);
   addFrenchBalconies(m, x0, x0 + w, y0 + d, 1 + gh + 1, fl - 1, fh, 2.4, 'y');
   addFrenchBalconies(m, y0, y0 + d, x0 + w, 1 + gh + 1, fl - 1, fh, 2.4, 'x');
   // slate mansard with zinc ridge, dormers and chimneys
-  const rz = 1 + h, slate = roofTileMat('#66727e');
+  const rz = 1 + h, slate = roofTileMat('#4f6788');
   m.hip(x0 + 0.6, y0 + 0.6, rz, w - 1.2, d - 1.2, 11, slate, 0.2);
   const dormer = { top: flat('#56616c'), side: wallMat(fc, { floorH: 99, base: 99 }), py: wallMat(fc, { floorH: 6, base: 1, winH: 3.5, winW: 1.2, gap: 3, sill: false }), px: wallMat(fc, { floorH: 6, base: 1, winH: 3.5, winW: 1.2, gap: 3, sill: false }) };
   for (const x of [3.2, 7.3, 11.4]) m.box(x, y0 + d - 2.2, rz + 1, 1.8, 1.6, 4.5, dormer);
@@ -379,6 +381,9 @@ function mSupermarket(lv, v) {
   for (let i = 0; i < 4; i++) m.box(1 + i * 3.6, d + 1.5, 1, 0.3, 3, 0.05, flat('#f2eee4'));
   const car = mCar(CAR_COLORS[(v + 2) % 8], 1);
   for (const f of car.faces) m.faces.push(shiftFace(f, 4.4, d + 3.2, 1, true));
+  // a tall brand sign out by the car park
+  m.box(14.6, 14.6, 1, 0.5, 0.5, h + 2, flat('#8c939a'));
+  m.box(13.7, 14.3, h + 3, 2.3, 1.1, 4.5, { top: flat(sc), side: signMat(sc, '#f7f1e3') });
   return m;
 }
 // rotate a face 90 degrees (swap x/y) and translate: used to drop vehicle models into tiles
@@ -391,13 +396,14 @@ function shiftFace(f, dx, dy, dz, rot) {
 function mBoutique(lv, v) {
   const m = new Model();
   lot(m, paveMat('#e6e0d4', 1.5));
-  const fc = '#f1ece2';
+  // a little pastel shop front with striped awnings and a gilded sign
+  const fc = ['#ecc6d8', '#c4e0d4', '#dccbec', '#f2d2b0'][v % 4];
   const fl = [2, 3, 4][lv - 1], gh = 11, fh = 10, h = gh + fl * fh + 2;
   const x0 = 2, y0 = 2, w = 12, d = 11;
   const front = wallMat(fc, { floorH: fh, base: 1, groundH: gh, ground: 'shop', winH: 7, winW: 1.6, gap: 3, bands: true, shopGlass: '#3a4450' });
   m.box(x0, y0, 1, w, d, h, { top: flatRoofMat('#d2cbbd'), side: wallMat(fc, { floorH: fh, base: 1, groundH: gh, winH: 7, bands: true }), py: front, px: front });
-  addAwning(m, x0 + 0.5, x0 + w - 0.5, y0 + d, gh, '#1f2226', '#1f2226', 1.6, 2);
-  addAwningX(m, y0 + 0.5, y0 + d - 0.5, x0 + w, gh, '#1f2226', '#1f2226', 1.6, 2);
+  addAwning(m, x0 + 0.5, x0 + w - 0.5, y0 + d, gh, '#1f2226', '#f4efe2', 1.6, 2);
+  addAwningX(m, y0 + 0.5, y0 + d - 0.5, x0 + w, gh, '#1f2226', '#f4efe2', 1.6, 2);
   m.box(x0 + 3, y0 + d + 0.05, 1 + gh, w - 6, 0.3, 2.6, { top: flat('#c9a24a'), side: signMat('#1f2226', '#d9b25a') });
   addPlanter(m, 2.5, 14.8); addPlanter(m, 13.2, 14.8);
   return m;
@@ -407,17 +413,19 @@ function mDept(lv, v) {
   const m = new Model();
   lot(m, M_LOT.paveDark);
   const fl = [4, 5, 6][lv - 1], gh = 12, fh = 10, h = gh + fl * fh + 3;
-  const fc = ['#efe6d6', '#e8dccb'][v % 2];
+  // grand sandstone store with a copper dome and red banners
+  const fc = ['#e2c592', '#d8b58a'][v % 2];
   const wall = wallMat(fc, { floorH: fh, base: 1, groundH: gh, ground: 'arcade', winH: 7, winW: 1.8, gap: 2.6, bands: true });
   m.box(0.6, 0.6, 1, 14.8, 14.8, h, { top: flatRoofMat('#cbc2b2'), side: wall });
   m.blob(8, 8, 1 + h + 1, 4.5, 7.5, mat((nx, ny, nz, P, o) => {
     const rib = (Math.floor((Math.atan2(P[1] - 8, P[0] - 8) + 4) * 2.6) % 2) === 0;
     const k = clamp(AMB + nx * LW[0] + ny * LW[1] + nz * LW[2], 0.5, 1.2);
-    const c = rib ? [210, 220, 222] : [120, 165, 180];
+    const c = rib ? [214, 178, 92] : [92, 156, 134];
     shadeTo(o, c[0], c[1], c[2], k + (nz > 0.8 ? 0.15 : 0)); return 2;
   }, { blob: true }));
-  for (const [x, y] of [[1.2, 1.2], [13.8, 1.2], [1.2, 13.8], [13.8, 13.8]]) m.box(x - 0.8, y - 0.8, 1 + h, 1.6, 1.6, 4, flat('#d9cfbe'));
-  m.box(4, 15.45, 1 + gh, 8, 0.3, 4, { top: flat('#2d5d8e'), side: signMat('#2d5d8e', '#f7f1e3') });
+  for (const [x, y] of [[1.2, 1.2], [13.8, 1.2], [1.2, 13.8], [13.8, 13.8]]) { m.box(x - 0.8, y - 0.8, 1 + h, 1.6, 1.6, 4, flat('#efe2c4')); m.blob(x, y, 1 + h + 4, 0.9, 1.6, blobMat('#5c9c86')); }
+  m.box(4, 15.45, 1 + gh, 8, 0.3, 4, { top: flat('#b3312a'), side: signMat('#b3312a', '#f2d27a') });
+  addFlag(m, 2.5, 15.6, 1 + gh + 4, 8, ['#b3312a', '#f2d27a']); addFlag(m, 13.5, 15.6, 1 + gh + 4, 8, ['#b3312a', '#f2d27a']);
   return m;
 }
 
@@ -468,14 +476,15 @@ function mMarketHall(lv, v) {
 function mFashion(lv, v) {
   const m = new Model();
   lot(m, paveMat('#e8e2d6', 1.5));
-  const fc = ['#f1ebdf', '#efe3cf', '#e9e1d4'][v % 3];
+  // luxury house: charcoal, oxblood or midnight stone with gold cornices and awnings
+  const fc = ['#34343a', '#4a2f2e', '#26323f'][v % 3];
   const fl = [3, 4, 5][lv - 1], gh = 12, fh = 10, h = gh + fl * fh + 2;
   const x0 = 1.5, y0 = 1.5, w = 13, d = 12;
   const front = belleMat(fc, { floorH: fh, groundH: gh, ground: 'shop', winH: 7, winW: 1.6, gap: 3, shopGlass: '#2f3540', bands: true });
   m.box(x0, y0, 1, w, d, h, { top: flatRoofMat('#d0c8b8'), side: belleMat(fc, { floorH: fh, groundH: gh, ground: null, winH: 7, winW: 1.6, gap: 3 }), py: front, px: front });
-  m.box(x0 - 0.3, y0 - 0.3, h - 0.6, w + 0.6, d + 0.6, 1.6, { top: flat(fc), side: flat(mixHex(fc, 0.9)) });
-  addAwning(m, x0 + 0.5, x0 + w - 0.5, y0 + d, gh - 0.5, '#15171a', '#15171a', 1.8, 1.8);
-  addAwningX(m, y0 + 0.5, y0 + d - 0.5, x0 + w, gh - 0.5, '#15171a', '#15171a', 1.8, 1.8);
+  m.box(x0 - 0.3, y0 - 0.3, h - 0.6, w + 0.6, d + 0.6, 1.6, { top: flat('#d4ae55'), side: flat('#b8913d') });
+  addAwning(m, x0 + 0.5, x0 + w - 0.5, y0 + d, gh - 0.5, '#c9a24a', '#c9a24a', 1.8, 1.8);
+  addAwningX(m, y0 + 0.5, y0 + d - 0.5, x0 + w, gh - 0.5, '#c9a24a', '#c9a24a', 1.8, 1.8);
   m.box(x0 + 2.5, y0 + d + 0.05, 1 + gh, w - 5, 0.3, 2.8, { top: flat('#c9a24a'), side: signMat('#15171a', '#e3c06a') });
   m.box(x0 + w + 0.05, y0 + 2.5, 1 + gh, 0.3, d - 5, 2.8, { top: flat('#c9a24a'), side: signMat('#15171a', '#e3c06a') });
   addFrenchBalconies(m, x0, x0 + w, y0 + d, 1 + gh + 2, fl - 1, fh, 3, 'y');
@@ -488,7 +497,8 @@ function mFashion(lv, v) {
 function mHardware(lv, v) {
   const m = new Model();
   lot(m, M_LOT.asphalt);
-  const corr = stripeMat('#c9cdd1', '#b3b8bd', 0.6, 's');
+  // builders' merchant: brick-red corrugated sheds under a green roof
+  const corr = stripeMat('#b9553c', '#a2472f', 0.6, 's');
   const x0 = 1.5, y0 = 1, w = 12, d = 9, h = [9, 11, 13][lv - 1];
   const front = mat((s, t, f, o) => {
     if (t > f.h - 3.2) { const c = (t > f.h - 0.6 || t < f.h - 2.8) ? [240, 236, 226] : (hash2(Math.floor(s * 1.4), 2, 7) < 0.6 && s > 2 && s < f.w - 2 ? [250, 246, 236] : [226, 112, 32]); o[0] = c[0]; o[1] = c[1]; o[2] = c[2]; return f.night ? 2 : 1; }
@@ -497,7 +507,7 @@ function mHardware(lv, v) {
     return corr.fn(s, t, f, o);
   });
   m.box(x0, y0, 1, w, d, h, { top: null, side: corr, py: front, px: front });
-  m.gable(x0, y0, 1 + h, w, d, 3, 'x', stripeMat('#a7adb3', '#959ba1', 0.7, 's'), corr, 0.4);
+  m.gable(x0, y0, 1 + h, w, d, 3, 'x', stripeMat('#4f8a5c', '#437a4f', 0.7, 's'), corr, 0.4);
   // lumber stacks, a ladder and paint pallets in the yard
   for (let i = 0; i < 3; i++) m.box(1.5 + i * 0.1, 11.2 + i * 1.3, 1, 5.5, 1.1, 1.2 + (i % 2) * 0.6, { top: flat('#d6b27a'), side: stripeMat('#c49a5e', '#b0864c', 0.5, 't') });
   m.line(8.5, 11.5, 1, 9.2, 11.5, 8, hex('#d0d4d8')); m.line(9.6, 11.5, 1, 10.3, 11.5, 8, hex('#d0d4d8'));
@@ -515,16 +525,18 @@ function mElectronics(lv, v) {
     const band = Math.floor((t - gh) / fh);
     if (t < gh) {
       if (t > 1 && t < gh - 1.5 && (s % 3.2) > 0.3) { const hi = t > gh - 4 && (s % 3.2) < 1.2; const c = hi ? [180, 210, 230] : [52, 74, 96]; o[0] = c[0]; o[1] = c[1]; o[2] = c[2]; return f.night ? 2 : 1; }
-      o[0] = 236; o[1] = 238; o[2] = 240; return 1;
+      o[0] = 40; o[1] = 46; o[2] = 58; return 1;
     }
+    // dark glass curtain wall with a cyan glow between the floors
     const ft = (t - gh) % fh;
-    if (ft > 1.5 && ft < fh - 1 && (s % 4) > 0.5) { if (f.night && hash2(Math.floor(s / 4), band, f.seed) < 0.6) { o[0] = 210; o[1] = 236; o[2] = 255; return 2; } o[0] = 70; o[1] = 96; o[2] = 120; return 1; }
-    o[0] = 240; o[1] = 241; o[2] = 243; return 1;
+    if (ft < 0.6) { o[0] = 40; o[1] = 214; o[2] = 230; return 2; }
+    if (ft > 1.5 && ft < fh - 1 && (s % 4) > 0.5) { if (f.night && hash2(Math.floor(s / 4), band, f.seed) < 0.6) { o[0] = 210; o[1] = 236; o[2] = 255; return 2; } o[0] = 88; o[1] = 132; o[2] = 168; return 1; }
+    o[0] = 46; o[1] = 54; o[2] = 68; return 1;
   });
-  m.box(x0, y0, 1, w, d, h, { top: flatRoofMat('#cfd2d6'), side: panel });
+  m.box(x0, y0, 1, w, d, h, { top: flatRoofMat('#5a6270'), side: panel });
   // blue sign band and a giant screen on the corner
-  m.box(x0 - 0.2, y0 + d - 0.2, 1 + gh, w + 0.4, 0.6, 2.2, { top: flat('#1f5f9e'), side: signMat('#1f5f9e', '#f4f8ff') });
-  m.box(x0 + w - 0.2, y0 - 0.2, 1 + gh, 0.6, d + 0.4, 2.2, { top: flat('#1f5f9e'), side: signMat('#1f5f9e', '#f4f8ff') });
+  m.box(x0 - 0.2, y0 + d - 0.2, 1 + gh, w + 0.4, 0.6, 2.2, { top: flat('#16a7bb'), side: signMat('#0f2a36', '#4ff0ff') });
+  m.box(x0 + w - 0.2, y0 - 0.2, 1 + gh, 0.6, d + 0.4, 2.2, { top: flat('#16a7bb'), side: signMat('#0f2a36', '#4ff0ff') });
   m.box(x0 + w + 0.05, y0 + 1.5, 1 + gh + 4, 0.4, 7, 5 + lv, mat((s, t, f, o) => {
     const c = t < 0.4 || t > f.h - 0.4 || s < 0.4 || s > f.w - 0.4 ? [30, 34, 40] : (Math.floor(s * 1.5 + t) % 5 < 2 ? [64, 182, 236] : (Math.floor(t * 2) % 3 ? [240, 120, 190] : [250, 214, 90]));
     o[0] = c[0]; o[1] = c[1]; o[2] = c[2]; return 2;
@@ -540,9 +552,10 @@ function mHomecenter(lv, v) {
   lot(m, M_LOT.asphalt);
   const x0 = 0.6, y0 = 0.6, w = 11, d = 14.8, h = [12, 14, 16][lv - 1];
   const side = mat((s, t, f, o) => {
-    if (t > f.h - 4 && t < f.h - 1) { const c = [222, 110, 34]; o[0] = c[0]; o[1] = c[1]; o[2] = c[2]; if (s > 2 && s < f.w - 2 && t > f.h - 3.4 && t < f.h - 1.6 && (Math.floor(s * 1.3) % 3) !== 2) { o[0] = 250; o[1] = 246; o[2] = 236; } return f.night ? 2 : 1; }
+    if (t > f.h - 4 && t < f.h - 1) { const c = [38, 46, 56]; o[0] = c[0]; o[1] = c[1]; o[2] = c[2]; if (s > 2 && s < f.w - 2 && t > f.h - 3.4 && t < f.h - 1.6 && (Math.floor(s * 1.3) % 3) !== 2) { o[0] = 255; o[1] = 196; o[2] = 80; } return f.night ? 2 : 1; }
     if (t < 6 && (s % 7) > 2 && (s % 7) < 5) { o[0] = 84; o[1] = 92; o[2] = 100; return 1; }
-    const c = (s % 1.2) < 0.25 ? [206, 208, 210] : [228, 229, 230]; o[0] = c[0]; o[1] = c[1]; o[2] = c[2]; return 1;
+    // the big orange shed of a home and garden store
+    const c = (s % 1.2) < 0.25 ? [214, 106, 30] : [238, 128, 44]; o[0] = c[0]; o[1] = c[1]; o[2] = c[2]; return 1;
   });
   m.box(x0, y0, 1, w, d, h, { top: flatRoofMat('#c9c4ba'), side });
   // garden centre under shade netting
@@ -928,13 +941,15 @@ function mTouristCentre(lv, v) {
 function mGuesthouse(lv, v) {
   const m = new Model();
   lot(m, M_LOT.grass);
-  const fc = ['#f0d58e', '#eba892', '#d5e2cb', '#e8b878'][v % 4], sh = ['#4e7c5b', '#2d5d8e', '#58789a'][v % 3];
+  // a seaside pension: sky blue, aqua or lavender walls with white shutters
+  const fc = ['#a9cbe0', '#9fd3cc', '#c4bde0', '#b6d6ea'][v % 4], sh = ['#f4f1ea', '#f4f1ea', '#f4f1ea'][v % 3];
   const fl = [3, 4, 5][lv - 1], h = 3 + fl * 9;
   m.box(2, 2, 1, 12, 9, h, { top: flat(fc), side: wallMat(fc, { floorH: 9, base: 3, shutter: sh, gap: 2.6 }), py: wallMat(fc, { floorH: 9, base: 3, shutter: sh, gap: 2.6, door: true }) });
   m.hip(2, 2, 1 + h, 12, 9, 6, roofTileMat(TERRACOTTA));
   addFrenchBalconies(m, 2, 14, 11, 1 + 12, fl - 1, 9, 2.6, 'y');
-  m.box(4.5, 11.05, 1 + 8, 7, 0.3, 2.2, { top: flat(sh), side: signMat(sh, '#f7f1e3') });
-  addUmbrella(m, 3, 13.8, 1, '#f4efe2', sh, 1.5); addUmbrella(m, 13, 13.8, 1, '#f4efe2', sh, 1.5);
+  m.box(4.5, 11.05, 1 + 8, 7, 0.3, 2.2, { top: flat('#2d5d8e'), side: signMat('#2d5d8e', '#f7f1e3') });
+  for (const x of [3.4, 6, 8.6, 11.2]) m.box(x, 11.1, 1 + 12, 1.6, 0.6, 0.7, { top: flat('#d94a6a'), side: flat('#8a5a3a') });
+  addUmbrella(m, 3, 13.8, 1, '#f4efe2', '#2d5d8e', 1.5); addUmbrella(m, 13, 13.8, 1, '#f4efe2', '#2d5d8e', 1.5);
   addPalm(m, 14.8, 2, 1, 0.8, v + 4);
   return m;
 }

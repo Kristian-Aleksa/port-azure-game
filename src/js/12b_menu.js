@@ -27,9 +27,10 @@ function openModal(kind, html) {
 }
 
 // ---- the menu --------------------------------------------------------------------------------------
-const MENU_TABS = [['game', 'save', 'Save & load'], ['finance', 'chart', 'Finances'], ['settings', 'gear', 'Settings'], ['help', 'help', 'How to play']];
+const MENU_TABS = [['game', 'save', 'Save & load'], ['settings', 'gear', 'Settings'], ['help', 'help', 'How to play']];
 function uiOpenMenu(tab = 'game') {
   if (!G.started) return;
+  if (tab === 'finance') return uiOpenFinance();
   UI.menuTab = tab;
   openModal('menu', `<div class="sheet menu"><header><h2>${icon('menu')} Menu</h2><button class="x" aria-label="Close" ${tipAttr('Close', '', 'Esc')}>×</button></header>
     <nav class="tabs" role="tablist">${MENU_TABS.map(([id, ic, name]) => `<button role="tab" data-tab="${id}" class="${id === tab ? 'on' : ''}" aria-selected="${id === tab}">${icon(ic)}<span>${name}</span></button>`).join('')}</nav>
@@ -41,7 +42,6 @@ function renderTab() {
   const el = $('tabBody'); if (!el) return;
   const t = UI.menuTab;
   if (t === 'game') renderSlots(el);
-  else if (t === 'finance') renderFinance(el);
   else if (t === 'settings') renderSettings(el);
   else renderHelp(el);
 }
@@ -102,19 +102,58 @@ function renderFinance(el) {
   const hist = G.history.slice(-14);
   const maxV = Math.max(1, ...hist.map((h) => Math.max(h.income, h.expenses)));
   const bars = hist.map((h) => `<div class="hb" ${tipAttr(`Day ${h.day}`, `Income ${fmtMoney(h.income)} · costs ${fmtMoney(h.expenses)} · net ${fmtMoney(h.income - h.expenses)}`)}><i class="in" style="height:${Math.round(h.income / maxV * 100)}%"></i><i class="out" style="height:${Math.round(h.expenses / maxV * 100)}%"></i><small>${h.day}</small></div>`).join('');
-  const L = maxLoan();
   el.innerHTML = `<div class="fin-grid">${col(T, 'Today so far')}${last ? col(last, `Yesterday (day ${last.day})`) : '<div class="ledger-col"><h3>Yesterday</h3><p class="muted">The first day is not over yet.</p></div>'}</div>
     ${hist.length ? `<h3>Last ${hist.length} days</h3><div class="hist" role="img" aria-label="Income and costs per day">${bars}</div><p class="legend"><i class="in"></i> income <i class="out"></i> costs</p>` : ''}
     <div class="fin-grid">
-      <div class="ledger-col"><h3>${icon('bank')} Bank loan</h3>${kv('Borrowed', fmtMoney(G.loan))}${kv('Interest', `${fmtMoney(Math.round(G.loan * ECON.loanRate))}/day (${(ECON.loanRate * 100).toFixed(2)}% a day)`)}${kv('Credit limit', fmtMoney(L))}
-        <div class="row-acts"><button class="mini" id="fBorrow" ${G.loan + ECON.loanStep > L ? 'aria-disabled="true"' : ''}>Borrow ${fmtMoney(ECON.loanStep)}</button><button class="mini" id="fRepay" ${G.loan <= 0 ? 'aria-disabled="true"' : ''}>Repay ${fmtMoney(Math.min(ECON.loanStep, G.loan || ECON.loanStep))}</button></div>
-        <p class="muted small">Below ${fmtMoney(0)} for ${ECON.bankruptDays} days in a row and the bank takes over the city.${G.debtDays ? ` <b class="neg">${G.debtDays} day${G.debtDays > 1 ? 's' : ''} in debt so far.</b>` : ''}</p></div>
       <div class="ledger-col"><h3>${icon('coin')} Taxes</h3><div class="seg">${Object.entries(TAX).map(([k, t]) => `<button class="mini ${G.tax === k ? 'on' : ''}" data-tax="${k}">${t.name}</button>`).join('')}</div>
-        <p class="muted small">Low: ship income ×0.85, happiness +4. High: ship income ×1.2, happiness −7 for every home.</p></div>
-    </div>`;
-  $('fBorrow').addEventListener('click', () => { const r = borrow(); if (!r.ok) return fail(r.why); sfx('coin'); renderTab(); });
-  $('fRepay').addEventListener('click', () => { const r = repay(); if (!r.ok) return fail(r.why); sfx('click'); renderTab(); });
-  el.querySelectorAll('[data-tax]').forEach((b) => b.addEventListener('click', () => { G.tax = b.dataset.tax; G.dirtyHappy = true; sfx('click'); renderTab(); }));
+        <p class="muted small">Low: ship income ×0.85, happiness +4. High: ship income ×1.2, happiness −7 for every home.</p>
+        <p class="muted small">Below ${fmtMoney(0)} for ${ECON.bankruptDays} days in a row and the bank takes over the city.${G.debtDays ? ` <b class="neg">${G.debtDays} day${G.debtDays > 1 ? 's' : ''} in debt so far.</b>` : ''}</p></div>
+    </div>
+    ${loansHtml()}`;
+  el.querySelectorAll('[data-loan]').forEach((b) => b.addEventListener('click', () => {
+    if (b.getAttribute('aria-disabled') === 'true') return fail(b.dataset.why || 'Not available');
+    const r = takeLoan(b.dataset.loan); if (!r.ok) return fail(r.why);
+    sfx('coin'); uiToast(`<b>Loan taken:</b> +${fmtMoney(r.amount)}. Interest is charged every evening until it is paid off.`, 'good', 5000); renderFinance(el); refreshHUD();
+  }));
+  el.querySelectorAll('[data-repay]').forEach((b) => b.addEventListener('click', () => {
+    const r = repayLoan(b.dataset.repay, b.dataset.full === '1'); if (!r.ok) return fail(r.why);
+    sfx(r.cleared ? 'coin' : 'click'); if (r.cleared) uiToast('<b>Loan paid off.</b> No more interest on it.', 'good'); renderFinance(el); refreshHUD();
+  }));
+  el.querySelectorAll('[data-tax]').forEach((b) => b.addEventListener('click', () => { G.tax = b.dataset.tax; G.dirtyHappy = true; sfx('click'); renderFinance(el); }));
+}
+// the bank: every loan on offer, taken, available or still locked
+function loansHtml() {
+  const rows = LOANS.map((d) => {
+    const l = G.loans.find((x) => x.id === d.id), why = loanBlock(d.id), locked = G.level < d.lvl;
+    const per = Math.round(d.amount * d.rate), q = Math.ceil(d.amount / 4);
+    let state, acts;
+    if (l) {
+      state = `<span class="loan-tag on">Owed ${fmtMoney(l.owed)}</span><span class="neg">−${fmtMoney(Math.round(l.owed * l.rate))}/day</span>`;
+      acts = `<button class="mini" data-repay="${d.id}" ${tipAttr('Pay back part', `Pays ${fmtMoney(Math.min(q, l.owed))} of it, which lowers the daily interest.`)}>Repay ${fmtMoney(Math.min(q, l.owed))}</button>`
+        + (l.owed > q ? `<button class="mini" data-repay="${d.id}" data-full="1">Pay off ${fmtMoney(l.owed)}</button>` : '');
+    } else if (locked) {
+      state = `<span class="loan-tag lock">${icon('lock')} ${esc(why)}</span>`;
+      acts = '<button class="mini" aria-disabled="true" data-loan="' + d.id + '" data-why="' + esc(why) + '">Locked</button>';
+    } else {
+      state = `<span class="loan-tag">Available</span>`;
+      acts = `<button class="mini ${why ? '' : 'primary'}" data-loan="${d.id}" ${why ? `aria-disabled="true" data-why="${esc(why)}"` : ''}>Borrow ${fmtMoney(d.amount)}</button>`;
+    }
+    return `<div class="loan ${l ? 'taken' : locked ? 'locked' : ''}">
+      <div class="loan-h"><b>${esc(d.name)}</b><small>${esc(d.who)}</small></div>
+      <div class="loan-n"><b>${fmtMoney(d.amount)}</b><small>${(d.rate * 100).toFixed(1)}% a day · ${fmtMoney(per)}/day at first</small></div>
+      <div class="loan-s">${state}</div><div class="loan-a">${acts}</div></div>`;
+  });
+  const legacy = G.loans.find((l) => l.id === 'legacy');
+  if (legacy) rows.unshift(`<div class="loan taken"><div class="loan-h"><b>Old loan</b><small>From before the bank's new rules</small></div><div class="loan-n"><b>${fmtMoney(legacy.owed)}</b><small>${(legacy.rate * 100).toFixed(1)}% a day</small></div><div class="loan-s"><span class="neg">−${fmtMoney(Math.round(legacy.owed * legacy.rate))}/day</span></div><div class="loan-a"><button class="mini" data-repay="legacy" data-full="1">Pay off ${fmtMoney(legacy.owed)}</button></div></div>`);
+  return `<h3>${icon('bank')} Bank loans <span class="muted small">${G.loans.length} of ${MAX_LOANS} taken${G.loans.length ? ` · interest ${fmtMoney(loanInterest())} a day` : ''}</span></h3>
+    <p class="muted small">Interest is charged every evening on what you still owe, until the loan is paid off. One of each kind at a time and at most ${MAX_LOANS} at once. Spend borrowed money on things that pay it back.</p>
+    <div class="loans">${rows.join('')}</div>`;
+}
+// Finances: its own window, opened from the lower bar, the money panel or F
+function uiOpenFinance() {
+  if (!G.started) return;
+  openModal('finance', `<div class="sheet menu fin"><header><h2>${icon('chart')} Finances</h2><button class="x" aria-label="Close" ${tipAttr('Close', '', 'Esc')}>×</button></header><div class="tab-body" id="finBody"></div></div>`);
+  renderFinance($('finBody'));
 }
 function renderSettings(el) {
   const sw = (k, label, desc) => `<label class="sw-row" ${tipAttr(label, desc)}><input type="checkbox" data-set="${k}" ${SETTINGS[k] ? 'checked' : ''}><span class="sw-box"></span><span><b>${label}</b><small>${desc}</small></span></label>`;
@@ -132,7 +171,9 @@ function renderSettings(el) {
 }
 function renderHelp(el) {
   el.innerHTML = `<ol class="help">
-    <li><b>A ship docks every morning.</b> It pays for every resident the harbour can serve, more when they are happy. Upkeep, staff wages, city services and loan interest come out every evening, so watch the Finances tab.</li>
+    <li><b>A ship docks every morning.</b> It pays for every resident the harbour can serve, more when they are happy. Upkeep, staff wages, city services and loan interest come out every evening, so keep an eye on Finances in the lower bar.</li>
+    <li><b>Bank loans</b> give you money now, but interest is charged every evening until you pay them off. Two loans at once is the limit; the two biggest unlock as the town grows. Spend borrowed money on things that earn it back.</li>
+    <li><b>The Town paper</b> always has four ads that pay cash for goals: more homes, more residents, a happier town. Take on up to two at a time; the reward arrives the moment a job is done.</li>
     <li><b>Homes need the moving list.</b> Happy residents (55%+) attract newcomers. Below 45% the town protests, below 40% the dockers strike and unhappy homes empty a quarter at a time until the plot is bare.</li>
     <li><b>Shops serve their radius.</b> Groceries matter from day one, clothes from 60 residents, utilities from 120. Trucks restock one shop each at dawn: the harbour, the road tunnel and rail freight each add trucks. Empty shelves upset people; shops with too few customers close.</li>
     <li><b>Transit is yours to plan.</b> Stops do nothing until you create a line and click its stops in order. Lines cost money to run, earn fares, and let homes reach shops along the route.</li>
@@ -147,7 +188,7 @@ function renderHelp(el) {
     <li><kbd>Q</kbd> <kbd>E</kbd> rotate view</li><li><kbd>1</kbd>–<kbd>8</kbd> build menus · <kbd>R</kbd> road</li>
     <li><kbd>Space</kbd> pause · <kbd>,</kbd> <kbd>.</kbd> speed</li><li><kbd>M</kbd> move · <kbd>X</kbd> demolish</li>
     <li><kbd>G</kbd> ranges · <kbd>H</kbd> happiness · <kbd>T</kbd> transit</li><li><kbd>Enter</kbd> finish a line · <kbd>Backspace</kbd> undo a stop</li>
-    <li><kbd>F</kbd> finances</li><li><kbd>Esc</kbd> cancel · open this menu</li>
+    <li><kbd>F</kbd> finances · <kbd>N</kbd> town paper</li><li><kbd>Esc</kbd> cancel · open this menu</li>
   </ul>`;
 }
 
