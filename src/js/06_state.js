@@ -173,7 +173,7 @@ function distTo(b, x, y) {
 function addBuilding(type, x, y, o = {}) {
   const id = G.nextId++;
   const b = {
-    id, type, x, y, lv: o.lv || 1, v: o.v != null ? o.v : Math.floor(hash2(x, y, G.seed + id) * 9),
+    id, type, x, y, lv: o.lv || 1, v: o.v != null ? o.v : Math.floor(hash2(x, y, G.seed + id) * 9), col: o.col | 0,
     facing: o.facing != null ? o.facing : chooseFacing(type, x, y), done: !!o.done, doneAt: o.doneAt || 0,
     res: 0, stock: {}, demand: {}, sat: {}, happy: 0.7, lowDays: 0, idleDays: 0, sold: 0, rev: 0, plv: o.plv || 0, age: 0,
   };
@@ -466,7 +466,7 @@ function spanTiles(s) { const r = []; for (let i = 0; i <= s.len + 1; i++) r.pus
 // ---- spending, demolish, upgrade, move, loans ---------------------------------------------------
 function spend(n, kind = 'spent') { G.money -= n; G.today[kind] = (G.today[kind] || 0) + n; }
 
-function placeBuilding(type, x, y) {
+function placeBuilding(type, x, y, col = 0) {
   const r = canPlace(type, x, y);
   if (!r.ok) return r;
   if (type === 'busstop') {
@@ -480,7 +480,7 @@ function placeBuilding(type, x, y) {
   const d = B[type];
   const big = LANDMARK.has(type) || type === 'port' || type === 'hotel';
   const buildMin = big ? 300 : HOUSING.has(type) ? 150 : 120;
-  const b = addBuilding(type, x, y, { done: false, doneAt: G.t + buildMin });
+  const b = addBuilding(type, x, y, { done: false, doneAt: G.t + buildMin, col: PAINTABLE.has(type) ? col : 0 });
   if (HOUSING.has(type)) { b.reserved = d.cap[0]; G.movingList -= d.cap[0]; }
   G.stats.built++; G.today.built++;
   return { ok: true, b, tiles: footprint(type, x, y) };
@@ -565,6 +565,22 @@ function upgrade(b) {
   footTouch(b);
   G.dirtyNet = true; G.dirtyHappy = true; G.rev++;
   return { ok: true };
+}
+
+// ---- paint -------------------------------------------------------------------------------------
+// choosing a colour while placing is free; repainting a finished building costs a small fee
+function paintCost(b) { return b.done ? Math.max(25, Math.round(B[b.type].cost * PAINT_FEE / 5) * 5) : 0; }
+function repaint(b, col) {
+  if (!PAINTABLE.has(b.type)) return { ok: false, why: 'This building cannot be repainted' };
+  col = clamp(col | 0, 0, PAINTS.length - 1);
+  if ((b.col | 0) === col) return { ok: false, why: 'It is already that colour' };
+  const cost = paintCost(b);
+  if (G.money < cost) return { ok: false, why: `Repainting costs ${fmtMoney(cost)}` };
+  if (cost) spend(cost);
+  b.col = col;
+  footTouch(b);
+  G.rev++;
+  return { ok: true, cost };
 }
 
 function moveCost(b) { return Math.max(50, Math.round(B[b.type].cost * MOVE_FEE)); }

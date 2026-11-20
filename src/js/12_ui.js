@@ -1,8 +1,8 @@
 // ---------------------------------------------------------------------------
 // Interface: HUD, build dock and drawers, info panel, town talk, petitions,
-// goals, toasts, banners and hover tooltips.
+// toasts, banners and hover tooltips.
 // ---------------------------------------------------------------------------
-const UI = { drawer: null, tipText: null, lastRefresh: 0, bubbleT: 0, thumbs: {}, modal: null };
+const UI = { drawer: null, tipText: null, lastRefresh: 0, bubbleT: 0, thumbs: {}, modal: null, paint: {} };
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 // data attributes for the hover tooltip: title, description and an optional key
@@ -44,12 +44,11 @@ function initUI() {
     <section class="card panel side" id="sidePanel" aria-label="Treasury and town news">
       <div class="ph money" id="moneyCard" ${tipAttr('Treasury', 'Click for the finances: income, costs, loans and taxes.', 'F')}>
         <div class="cash-wrap"><div class="cash" id="money">$0</div><div class="sub" id="moneySub">&nbsp;</div></div>
-        <button class="fold" id="foldSide" aria-controls="sideBody" ${tipAttr('Fold panel', 'Show or hide town talk and the harbourmaster\'s notes.')}>${icon('fold')}</button>
+        <button class="fold" id="foldSide" aria-controls="sideBody" ${tipAttr('Fold panel', 'Show or hide town talk and your Town paper jobs.')}>${icon('fold')}</button>
       </div>
       <section class="petition" id="petition" hidden aria-live="polite"></section>
       <div class="pb" id="sideBody">
         <section class="talk" aria-label="Town talk"><h2>Town talk</h2><ul id="talk"></ul></section>
-        <section class="goals" aria-label="Goals"><h2>Harbourmaster's notes</h2><div id="goal"></div></section>
         <section class="jobs" id="paperJobs" hidden aria-label="Town paper jobs"><h2>Town paper jobs</h2><div id="paperJobList"></div></section>
       </div>
     </section>
@@ -154,7 +153,6 @@ function bindEvents() {
     const net = rec.income - rec.expenses;
     const lg = Math.round(rec.listGrowth);
     uiToast(`<b>Day ${rec.day} closed.</b> Income ${fmtMoney(rec.income)} · costs ${fmtMoney(rec.expenses)} · <b class="${net >= 0 ? 'pos' : 'neg'}">${net >= 0 ? '+' : ''}${fmtMoney(net)}</b> · moving list ${lg >= 0 ? '+' : ''}${lg}`, 'day', 6500);
-    checkGoals();
     if (SETTINGS.autosave) saveGame('auto');
   });
 }
@@ -283,6 +281,12 @@ function initFold(btnId, panelId, key) {
     try { const o = JSON.parse(localStorage.getItem(FOLD_KEY) || '{}') || {}; o[key] = f; localStorage.setItem(FOLD_KEY, JSON.stringify(o)); } catch (err) { /* fine */ }
   });
 }
+// ---- paint swatches ------------------------------------------------------------------------------
+function buildPaint(type) { return PAINTABLE.has(type) ? (UI.paint[type] | 0) : 0; }
+function paintSwatches(cur, cost) {
+  return PAINTS.map((c, i) => `<button class="sw-b${i === cur ? ' on' : ''}${i ? '' : ' mix'}" data-paint="${i}" aria-pressed="${i === cur}" ${tipAttr(PAINT_NAMES[i], i ? (cost ? `Repaint for ${fmtMoney(cost)}.` : 'Build in this colour.') : (cost ? `Back to the builder's own colours for ${fmtMoney(cost)}.` : "The builder's own colours, a little different on every plot."))}${i ? ` style="background:${c}"` : ''}></button>`).join('');
+}
+
 function uiToolChanged() {
   const at = $('activeTool');
   if (at) {
@@ -290,12 +294,16 @@ function uiToolChanged() {
     if (IN.tool === 'build') {
       const d = B[IN.type], pl = d.place;
       const how = pl === 'drag' ? ' per tile · drag to build' : pl === 'span' ? ' per tile · drag from end to end' : pl === 'terra' ? ' per plot · click or drag a rectangle' : pl === 'line' ? (LINE_KIND[d.line].outside ? ' · click a stop near a Tourist Centre' : ' · click stops in order, then Enter') : '';
-      html = `<img class="th" alt="" src="${thumb(IN.type)}"><span><b>${esc(d.name)}</b> · ${fmtMoney(pl === 'line' ? newLineCost(d.line, LINE_KIND[d.line].outside ? 2 : 2) : d.cost)}${how}</span>${pl === 'line' && !LINE_KIND[d.line].outside ? '<button class="mini" id="finishDraft">Finish line</button>' : ''}<button class="x" aria-label="Stop building">×</button>`;
+      const col = buildPaint(IN.type);
+      html = `<img class="th" alt="" src="${thumb(IN.type, col)}"><span><b>${esc(d.name)}</b> · ${fmtMoney(pl === 'line' ? newLineCost(d.line, LINE_KIND[d.line].outside ? 2 : 2) : d.cost)}${how}</span>${PAINTABLE.has(IN.type) ? `<span class="paints" role="group" aria-label="Colour">${paintSwatches(col)}</span>` : ''}${pl === 'line' && !LINE_KIND[d.line].outside ? '<button class="mini" id="finishDraft">Finish line</button>' : ''}<button class="x" aria-label="Stop building">×</button>`;
     } else if (IN.tool === 'circuit') html = `<span><b>Grand Prix circuit</b> · click road tiles around a loop, then click the first one again · ${fmtMoney(F1.tileFee)} per tile</span><button class="mini" id="finishDraft">Build circuit</button><button class="x" aria-label="Stop">×</button>`;
     else if (IN.tool === 'demolish' || IN.tool === 'move') html = `<span><b>${IN.tool === 'demolish' ? 'Demolish' : 'Move'}</b> · ${IN.tool === 'demolish' ? 'click or drag over what to remove' : 'pick a building, then a new plot'}</span><button class="x" aria-label="Stop">×</button>`;
     at.innerHTML = html; at.hidden = !html;
     if (html) at.querySelector('.x').addEventListener('click', () => setTool('inspect'));
     const fd = $('finishDraft'); if (fd) fd.addEventListener('click', finishDraft);
+    at.querySelectorAll('[data-paint]').forEach((sw) => sw.addEventListener('click', () => {
+      UI.paint[IN.type] = +sw.dataset.paint; sfx('click'); uiToolChanged();
+    }));
   }
   document.querySelectorAll('.tool').forEach((b) => b.classList.toggle('on', IN.tool === b.dataset.tool));
   document.querySelectorAll('.card-b').forEach((c) => c.classList.toggle('on', IN.tool === 'build' && IN.type === c.dataset.type));
@@ -341,8 +349,9 @@ function tipFor(t) {
   if (d.size) parts.push(`Footprint ${d.size[0]}×${d.size[1]} plots.`);
   return parts.join(' ');
 }
-function thumb(t) {
-  if (UI.thumbs[t]) return UI.thumbs[t];
+function thumb(t, col = 0) {
+  const tk = col ? `${t}|c${col}` : t;
+  if (UI.thumbs[tk]) return UI.thumbs[tk];
   const W = 116, H = 80;
   const cv = document.createElement('canvas'); cv.width = W; cv.height = H;
   const x = cv.getContext('2d'); x.imageSmoothingEnabled = false;
@@ -357,13 +366,13 @@ function thumb(t) {
   if (t === 'busstop') sp = renderModel(mBusStop(2), 0, {});
   else if (t === 'station') sp = renderModel(mStationPart(0), 0, {});
   else if (t === 'port') sp = renderModel(mPort(0, 0), 0, {});
-  else sp = renderModel(MODEL_FN[t](1, 1), 0, { seed: 3 });
+  else sp = renderModel(withPaint(col, () => MODEL_FN[t](1, 1)), 0, { seed: 3 });
   let s = 1;
   if (sp.w * 2 <= W && sp.h * 2 <= H) s = 2;
   else if (sp.w > W || sp.h > H) s = 0.5;
   const dw = Math.floor(sp.w * s), dh = Math.floor(sp.h * s);
   x.drawImage(sp.cv, 0, 0, sp.w, sp.h, Math.floor((W - dw) / 2), H - dh, dw, dh);
-  return (UI.thumbs[t] = cv.toDataURL());
+  return (UI.thumbs[tk] = cv.toDataURL());
 }
 const DRAWER_TEXT = {
   housing: 'Homes need people on the moving list and a road on the same level. Each resident pays into the morning ship.',
@@ -501,6 +510,10 @@ function renderInfo() {
     body += kv('Radius', `${radiusOf(b)} plots`) + kv('Happiness at the centre', `+${(joyOf(b) * (LANDMARK.has(b.type) ? 5 : 6)).toFixed(0)}`) + (fx.length ? `<p class="muted">${esc(fx.join(' · '))}</p>` : '')
       + (d.ticket ? kv('Tickets', fmtMoney(d.ticket)) + kv('Takings yesterday', fmtMoney(b.lastRev || 0)) : '') + (d.cafe ? kv('Takings yesterday', fmtMoney(b.lastRev || 0)) : '') + (d.upkeep ? kv('Upkeep', fmtMoney(d.upkeep) + '/day') : '');
   }
+  if (PAINTABLE.has(b.type)) {
+    const pc = paintCost(b);
+    body += `<div class="paintrow"><span>Colour <small>${esc(PAINT_NAMES[b.col | 0])}${pc ? ` · repaint ${fmtMoney(pc)}` : ' · free until it opens'}</small></span><span class="paints" role="group" aria-label="Colour">${paintSwatches(b.col | 0, pc)}</span></div>`;
+  }
   const acts = [];
   if (b.done || b.type === 'port') {
     const u = upgradeInfo(b);
@@ -515,6 +528,15 @@ function renderInfo() {
   el.innerHTML = `<header><h2>${esc(d.name)}${b.type === 'port' || d.maxLevel === 1 ? '' : ` <small>Lv ${b.lv}</small>`}</h2><button class="x" aria-label="Close">×</button></header>${body}
     <div class="acts">${acts.join('')}</div>${!u.ok && u.why && u.why !== 'Fully upgraded' && b.done ? `<p class="why">${esc(u.why)}</p>` : ''}`;
   el.querySelector('.x').addEventListener('click', () => select(null));
+  el.querySelectorAll('[data-paint]').forEach((sw) => sw.addEventListener('click', () => {
+    const col = +sw.dataset.paint;
+    if ((b.col | 0) === col) return;
+    const r = repaint(b, col);
+    if (!r.ok) return fail(r.why);
+    sfx('click'); b.flash = performance.now();
+    if (r.cost) uiToast(`${esc(d.name)} repainted ${esc(PAINT_NAMES[col].toLowerCase())} · ${fmtMoney(r.cost)}`, 'good');
+    renderInfo(); refreshHUD();
+  }));
   el.querySelectorAll('[data-act]').forEach((btn) => btn.addEventListener('click', () => {
     const a = btn.dataset.act;
     if (a === 'upgrade') { const r = upgrade(b); if (!r.ok) fail(r.why); else { sfx('build'); b.flash = performance.now(); uiToast(`${d.name} upgraded.`, 'good'); } }
@@ -550,45 +572,6 @@ function renderTileInfo(b, el) {
     if (a === 'demolish') { const r = demolish(b.x, b.y); if (!r.ok) fail(r.why); else { sfx('demolish'); select(null); } }
     else if (a === 'newline') { setTool('build', 'busline'); IN.draft.stops.push(k); updateOverlay(); }
   }));
-}
-
-// ---- goals --------------------------------------------------------------------------------------------
-const has = (t, f) => [...G.buildings.values()].some((b) => b.type === t && (!f || f(b)));
-const GOALS = [
-  { id: 'house', text: 'Build a Cottage beside the road', hint: 'Open Homes (1). A home needs people on the moving list.', done: () => has('cottage'), reward: 150 },
-  { id: 'park', text: 'Build a Pocket Park near your homes', hint: 'Parks lift happiness in a radius. Watch the ring when placing it.', done: () => has('park'), reward: 150 },
-  { id: 'tunnel', text: 'Connect a road from the harbour to the road tunnel', hint: `The tunnel adds ${TUNNEL_TRUCKS} delivery trucks every morning.`, done: () => G.links.road, reward: 400, show: () => [G.map.roadPortal.x + 0.5, G.map.roadPortal.y + 1.5] },
-  { id: 'village', text: 'Grow to 60 residents', hint: 'Keep happiness above 55% so the moving list grows.', done: () => G.pop >= 60, reward: 500 },
-  { id: 'busline', text: 'Create a bus line with two stops', hint: 'Place bus stops on roads, then New Bus Line in Transport (6) and click the stops.', done: () => [...G.lines.values()].some((l) => l.kind === 'bus' && l.valid), reward: 400 },
-  { id: 'clothes', text: 'Open a Boutique', hint: 'From 60 residents people want clothes too.', done: () => has('boutique') || has('fashion') || has('dept'), reward: 400 },
-  { id: 'town', text: 'Grow to 180 residents', hint: 'Tourism, rail and pools unlock at Town.', done: () => G.pop >= 180, reward: 1000 },
-  { id: 'tourist', text: 'Build a Tourist Centre and an intercity coach route', hint: 'The route runs from the road tunnel to a bus stop inside the centre\'s radius.', done: () => [...G.lines.values()].some((l) => LINE_KIND[l.kind].outside && l.tourOk), reward: 3000 },
-  { id: 'hotel', text: 'Build a Guest House for overnight visitors', hint: 'Without beds, tourists go home in the evening.', done: () => has('guesthouse') || has('hotel'), reward: 2000 },
-  { id: 'terrace', text: 'Raise a plot and build a home on it', hint: 'Terrain (7): raise land, then drag a road up with a ramp. Raised homes see the sea.', done: () => [...G.buildings.values()].some((b) => HOUSING.has(b.type) && tileLevel(b.x, b.y) > 0), reward: 1500 },
-  { id: 'large', text: 'Grow to 450 residents', hint: 'Supermarkets, villas and the first landmarks unlock.', done: () => G.pop >= 450, reward: 3000 },
-  { id: 'landmark', text: 'Build a landmark', hint: 'Landmarks give the biggest happiness boost and draw tourists.', done: () => [...G.buildings.values()].some((b) => LANDMARK.has(b.type) && b.done), reward: 6000 },
-  { id: 'city', text: 'Grow to 1,100 residents', hint: 'At City level you can upgrade the harbour.', done: () => G.pop >= 1100, reward: 6000 },
-  { id: 'port2', text: 'Upgrade your harbour', hint: 'Select the harbour and press Upgrade.', done: () => has('port', (b) => b.plv > 0), reward: 8000 },
-  { id: 'lcity', text: 'Grow to 2,800 residents', hint: 'Skyscrapers, the mall, the zoo and the Grand Prix licence unlock.', done: () => G.pop >= 2800, reward: 12000 },
-  { id: 'f1', text: 'Hold your first Grand Prix', hint: 'Buy the licence in Landmarks (4), design a circuit, and wait for race day.', done: () => (G.stats.races || 0) > 0, reward: 20000 },
-  { id: 'metro', text: 'Grow to 6,500 residents', hint: 'The container port and the Prince\'s Palace unlock.', done: () => G.pop >= 6500, reward: 30000 },
-  { id: 'prince', text: 'Grow to 13,000 residents', hint: 'Long live the Principality!', done: () => G.pop >= 13000, reward: 60000 },
-];
-function currentGoal() { return GOALS.find((g) => !G.goals[g.id]); }
-function checkGoals() {
-  let g = currentGoal(), guard = 0;
-  while (g && g.done() && guard++ < 20) {
-    G.goals[g.id] = true; G.money += g.reward; G.today.grants += g.reward;
-    uiToast(`<b>Goal complete:</b> ${esc(g.text)} · +${fmtMoney(g.reward)}`, 'good', 5000); sfx('coin');
-    g = currentGoal();
-  }
-  const done = GOALS.filter((x) => G.goals[x.id]).length;
-  const key = g ? g.id + done : 'all';
-  if (UI.goalKey === key) return;
-  UI.goalKey = key;
-  $('goal').innerHTML = g ? `<p class="goal-t">${esc(g.text)}</p><p class="goal-h">${esc(g.hint)}</p><p class="goal-r">Reward ${fmtMoney(g.reward)} · ${done}/${GOALS.length} done${g.show ? ' <button class="mini show" id="goalShow">Show me</button>' : ''}</p>` : '<p class="goal-t">Every note is ticked off. Keep building!</p>';
-  const sb = $('goalShow');
-  if (sb) sb.addEventListener('click', () => { const [x, y] = g.show(); centerOnTile(x, y); sfx('click'); });
 }
 
 // ---- toasts, tips, banners, tooltips -------------------------------------------------------------------
@@ -655,7 +638,6 @@ function uiTick(dt, now) {
     if (IN.selected && !$('info').hidden && !$('info').matches(':hover')) renderInfo();
     if (now - (UI.talkT || 0) > 2000 || UI.talkRev !== G.rev) { refreshTalk(); UI.talkT = now; UI.talkRev = G.rev; }
     if (UI.drawer && UI.drawerLvl !== G.level) { UI.drawerLvl = G.level; renderDrawer(); }
-    if (++UI.goalTick % 4 === 0) checkGoals();
   }
   UI.bubbleT -= dt * (G.speed ? 1 : 0);
   if (UI.bubbleT <= 0 && SETTINGS.bubbles) {
@@ -668,4 +650,3 @@ function uiTick(dt, now) {
     }
   }
 }
-UI.goalTick = 0;

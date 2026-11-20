@@ -13,6 +13,11 @@ const PAPER_SPONSORS = {
   riders: ['Transport Committee', 'The Green Coast Society'],
 };
 const roundTo = (v, n) => Math.max(n, Math.round(v / n) * n);
+// Rewards start at $2,000 and grow with the town's level and with every job already paid out.
+// Ads posted before this rule (no rv) are swapped for fresh ones.
+const PAPER_BASE = 2000, PAPER_LEVEL = [1, 1.25, 1.6, 2.1, 2.8, 3.8, 5.2, 7], PAPER_PER_JOB = 0.1, PAPER_RV = 2;
+function paperBase() { return PAPER_BASE * PAPER_LEVEL[Math.min(G.level, PAPER_LEVEL.length - 1)] * (1 + PAPER_PER_JOB * ((G.paper && G.paper.done) || 0)); }
+function adReward(mult) { return Math.max(PAPER_BASE, roundTo(paperBase() * mult * (1 + Math.random() * 0.15), 50)); }
 const nicePop = (v) => (v < 100 ? roundTo(v, 5) : v < 1000 ? roundTo(v, 10) : roundTo(v, 50));
 const pick = (a) => a[Math.floor(Math.random() * a.length)];
 const lineRiders = () => [...G.lines.values()].reduce((a, l) => a + (l.valid && !LINE_KIND[l.kind].outside ? l.riders || 0 : 0), 0);
@@ -38,30 +43,30 @@ function makeAd() {
   for (let tries = 0; tries < 20; tries++) {
     let r = Math.random() * kinds.reduce((a, k) => a + k[1], 0), kind = kinds[0][0];
     for (const [k, w] of kinds) { if ((r -= w) <= 0) { kind = k; break; } }
-    const ad = { id: P.seq, kind, day: G.day(), sponsor: pick(PAPER_SPONSORS[kind]) };
+    const ad = { id: P.seq, kind, day: G.day(), sponsor: pick(PAPER_SPONSORS[kind]), rv: PAPER_RV };
     if (kind === 'build') {
       const types = paperBuildTypes().filter((t) => !paperTaken('build', t));
       if (!types.length) continue;
       const t = pick(types), c = B[t].cost;
       const n = c <= 500 ? 3 + Math.floor(Math.random() * 3) : c <= 2500 ? 2 + Math.floor(Math.random() * 2) : c <= 9000 ? 1 + Math.floor(Math.random() * 2) : 1;
-      Object.assign(ad, { type: t, n, reward: roundTo(n * c * 0.35 + 100, 50) });
+      Object.assign(ad, { type: t, n, reward: adReward(1 + clamp((n * c - 2000) / 20000, 0, 0.6)) });
     } else if (kind === 'pop') {
       if (paperTaken('pop')) continue;
       const n = nicePop(G.pop + Math.max(25, G.pop * 0.3));
-      Object.assign(ad, { n, reward: roundTo((n - G.pop) * 7 + 150, 50) });
+      Object.assign(ad, { n, reward: adReward(1.1) });
     } else if (kind === 'happy') {
       if (paperTaken('happy')) continue;
       const n = clamp(roundTo(G.happy * 100 + 7, 5), 60, 92);
       if (n <= Math.round(G.happy * 100)) continue;
-      Object.assign(ad, { n, reward: roundTo(250 + G.pop * 1.2 + (n - 50) * 15, 50) });
+      Object.assign(ad, { n, reward: adReward(1) });
     } else if (kind === 'tourists') {
       if (paperTaken('tourists')) continue;
       const n = nicePop(Math.max(20, G.tourists.day * 1.4 + 20));
-      Object.assign(ad, { n, reward: roundTo(n * 6 + 200, 50) });
+      Object.assign(ad, { n, reward: adReward(1.1) });
     } else {
       if (paperTaken('riders')) continue;
       const n = nicePop(lineRiders() * 1.4 + 30);
-      Object.assign(ad, { n, reward: roundTo(n * 4 + 200, 50) });
+      Object.assign(ad, { n, reward: adReward(1.05) });
     }
     P.seq++;
     return ad;
@@ -72,6 +77,7 @@ function makeAd() {
 function paperEnsure(refresh) {
   if (!G.paper) G.paper = { offers: [], jobs: [], seq: 1, done: 0 };
   const P = G.paper;
+  P.offers = P.offers.filter((a) => a.rv === PAPER_RV);
   if (refresh) {
     const old = P.offers.filter((a) => G.day() - a.day >= PAPER_STALE).sort((a, b) => a.day - b.day)[0];
     if (old) P.offers = P.offers.filter((a) => a !== old);
@@ -172,7 +178,7 @@ function renderPaper() {
     </header>
     <section class="paper-jobs"><h3>Your jobs <span>${P.jobs.length} of ${PAPER_JOBS}</span></h3>${jobs}</section>
     <section class="paper-ads"><h3>Classifieds</h3><div class="ads">${ads}</div>
-      <p class="paper-foot">Rewards are paid in cash the moment a job is done. Ads stay up for ${PAPER_STALE} days; new ones arrive as old ones go.</p></section>`;
+      <p class="paper-foot">Rewards are paid in cash the moment a job is done, and grow as the town grows and with every job you finish. Ads stay up for ${PAPER_STALE} days; new ones arrive as old ones go.</p></section>`;
   el.querySelectorAll('[data-take]').forEach((b) => b.addEventListener('click', () => {
     if (b.getAttribute('aria-disabled') === 'true') return fail(`You can work on ${PAPER_JOBS} ads at once. Finish or drop one first.`);
     const r = takeAd(+b.dataset.take); if (!r.ok) return fail(r.why);
