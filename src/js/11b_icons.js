@@ -91,6 +91,7 @@ const ICON_DEF = {
   save: (g) => { g.rect(2, 2, 12, 12, 'B').rect(4, 2, 7, 4, 'c').rect(9, 3, 1, 2, 'B').rect(4, 9, 8, 5, 'w').rect(5, 10, 6, 1, 's').rect(5, 12, 6, 1, 's'); },
   load: (g) => { g.rect(1, 3, 6, 2, 'Y').rect(1, 5, 14, 9, 'Y').poly([[3, 8], [15.5, 8], [13, 14], [1, 14]], 'y'); },
   gear: (g) => { for (let i = 0; i < 8; i++) { const a = i * Math.PI / 4; g.rect(Math.round(8 + Math.cos(a) * 5.6 - 1), Math.round(8 + Math.sin(a) * 5.6 - 1), 2, 2, 's'); } g.disc(8, 8, 5, 's').disc(8, 8, 2, 'M'); },
+  paper: (g) => { g.rect(1, 2, 13, 12, 'w').rect(14, 4, 1, 10, 'm').rect(3, 4, 9, 2, 'M').rect(3, 7, 4, 4, 's').rect(8, 7, 4, 1, 'm').rect(8, 9, 4, 1, 'm').rect(3, 12, 9, 1, 'm'); },
   chart: (g) => { g.rect(1, 14, 14, 1, 'w').rect(2, 9, 3, 5, 'r').rect(6, 5, 3, 9, 'y').rect(10, 2, 3, 12, 'g'); },
   bank: (g) => { g.poly([[1, 6], [8, 1.5], [15, 6]], 's').rect(2, 6, 12, 1, 's').rect(3, 7, 2, 6, 'w').rect(7, 7, 2, 6, 'w').rect(11, 7, 2, 6, 'w').rect(1, 13, 14, 2, 's'); },
   cart: (g) => { g.line(1, 2, 3, 2, 'm').line(3, 2, 5, 10, 'm').rect(4, 4, 11, 5, 'g').rect(5, 10, 9, 1, 'm').disc(6, 13, 1.6, 'M').disc(12, 13, 1.6, 'M').set(7, 5, 'r').set(10, 6, 'o').set(12, 5, 'y'); },

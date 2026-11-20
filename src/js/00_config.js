@@ -26,32 +26,41 @@ const N_ROAD = 1, N_RAIL = 2, N_PORTAL = 4, N_BUS = 8, N_CIRCUIT = 16;
 const VIEWS = [0, 3];
 
 const DAY_MIN = 1440;
-const DAY_RATE = 22;       // game minutes per real second, 06:00-22:00 at 1x (~44 s)
-const NIGHT_RATE = 96;     // at night (~5 s)
+const DAY_RATE = 13;       // game minutes per real second, 06:00-22:00 at 1x (~74 s)
+const NIGHT_RATE = 60;     // at night (~8 s): a whole day is about 1.4 minutes at normal speed
 const SPEEDS = [0, 1, 2, 4];
 
 const LEVELS = [
-  { name: 'Hamlet', pop: 0, loan: 10000 },
-  { name: 'Village', pop: 60, loan: 20000 },
-  { name: 'Town', pop: 180, loan: 40000 },
-  { name: 'Large Town', pop: 450, loan: 80000 },
-  { name: 'City', pop: 1100, loan: 150000 },
-  { name: 'Large City', pop: 2800, loan: 250000 },
-  { name: 'Metropolis', pop: 6500, loan: 400000 },
-  { name: 'Principality', pop: 13000, loan: 600000 },
+  { name: 'Hamlet', pop: 0 },
+  { name: 'Village', pop: 60 },
+  { name: 'Town', pop: 180 },
+  { name: 'Large Town', pop: 450 },
+  { name: 'City', pop: 1100 },
+  { name: 'Large City', pop: 2800 },
+  { name: 'Metropolis', pop: 6500 },
+  { name: 'Principality', pop: 13000 },
 ];
 
 // ---- economy ------------------------------------------------------------------
 const ECON = {
-  start: 5000,
-  portRate: 8,              // $ per served resident per ship
-  services: 0.5,            // city services $ per resident per day
-  roadUpkeep: 1, railUpkeep: 2, spanUpkeep: 20,
-  loanStep: 5000, loanRate: 0.004,    // interest per day on the outstanding loan
+  start: 4000,
+  portRate: 6.5,            // $ per served resident per ship
+  services: 0.9,            // city services $ per resident per day
+  roadUpkeep: 1.2, railUpkeep: 2, spanUpkeep: 20,
+  loanRate: 0.004,          // daily interest on a loan carried over from an older save
   wholesale: 0.55,          // shops pay this share of the retail price for stock
   bankruptDays: 7,
   terraform: 150,           // per level per tile
 };
+// Bank loans: interest is charged every evening on what is still owed. One of each kind at a
+// time, at most two at once. The two larger ones unlock as the city grows (LEVELS index).
+const LOANS = [
+  { id: 'small', name: 'Small loan', amount: 3000, rate: 0.03, lvl: 0, who: 'Quayside Savings Bank' },
+  { id: 'business', name: 'Business loan', amount: 8000, rate: 0.025, lvl: 0, who: 'Quayside Savings Bank' },
+  { id: 'development', name: 'Development loan', amount: 25000, rate: 0.018, lvl: 2, who: 'Banque de la Riviera' },
+  { id: 'investment', name: 'Investment loan', amount: 75000, rate: 0.012, lvl: 4, who: 'Banque de la Riviera' },
+];
+const MAX_LOANS = 2;
 const TAX = {
   low: { name: 'Low', mult: 0.85, joy: 4 },
   normal: { name: 'Normal', mult: 1, joy: 0 },
@@ -60,7 +69,7 @@ const TAX = {
 
 // Harbour levels: residents served, base income, delivery trucks per morning
 const PORT_LV = [
-  { name: 'Fishing Quay', cap: 800, base: 120, trucks: 6, ship: 0, cost: 0, lvl: 0 },
+  { name: 'Fishing Quay', cap: 800, base: 80, trucks: 6, ship: 0, cost: 0, lvl: 0 },
   { name: 'Cargo Harbour', cap: 2600, base: 450, trucks: 16, ship: 1, cost: 45000, lvl: 4 },
   { name: 'Container Port', cap: 7500, base: 1300, trucks: 40, ship: 2, cost: 140000, lvl: 6 },
 ];

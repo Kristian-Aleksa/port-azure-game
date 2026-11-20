@@ -432,7 +432,8 @@ function initInput() {
     else if (k === 't') uiToggleOverlay('transit');
     else if (k === 'g') uiToggleRanges();
     else if (k === 'r') setTool('build', 'road');
-    else if (k === 'f') uiOpenMenu('finance');
+    else if (k === 'f') uiOpenFinance();
+    else if (k === 'n') uiOpenPaper();
     else if (k === '.' || k === '>') uiSetSpeed(Math.min(3, G.speed + 1));
     else if (k === ',' || k === '<') uiSetSpeed(Math.max(0, G.speed - 1));
     else { const c = CATS.find((c) => c.key === k); if (c) uiOpenDrawer(c.id); }

@@ -86,6 +86,7 @@ src/
     06_state.js       game state, placing, terrain editing
     07_net.js         roads, rail, transit lines, the race circuit
     08_sim.js         economy, happiness, shops, tourism, events
+    08b_paper.js      the Town paper: reward ads and jobs
     09_agents.js      cars, buses, trains, ships, people, the race
     10_render.js      drawing the city
     10b_backdrop.js   the mountains and sea beyond the map

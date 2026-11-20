@@ -143,7 +143,7 @@ function checkLevel() {
     const unlocks = B_ORDER.filter((k) => B[k].lvl === G.level).map((k) => B[k].name);
     for (const p of PORT_LV) if (p.lvl === G.level && p.cost) unlocks.push('Harbour upgrade: ' + p.name);
     if (UPGRADE_LVL.includes(G.level)) unlocks.push(`Building upgrades to level ${UPGRADE_LVL.indexOf(G.level) + 1}`);
-    unlocks.push(`Bank credit up to ${fmtMoney(LEVELS[G.level].loan)}`);
+    for (const l of LOANS) if (l.lvl === G.level) unlocks.push(`the ${fmtMoney(l.amount)} ${l.name.toLowerCase()} at the bank`);
     emit('levelup', { level: G.level, unlocks });
   }
 }
@@ -178,6 +178,7 @@ function completeBuilding(b) {
   footTouch(b);
   G.dirtyNet = true; G.rev++;
   emit('built', b);
+  paperBuilt(b.type);
 }
 
 function fireEvent(e) {
@@ -191,6 +192,7 @@ function fireEvent(e) {
   if (SALES_HOURS.includes(e)) salesHour();
   if (e === EV.HOTEL) hotelsCheckIn();
   if (e === EV.CLOSE) endOfDay();
+  paperCheck();
 }
 
 // strikes and protests decided the evening before take effect at dawn
@@ -429,7 +431,7 @@ function endOfDay() {
   for (const b of G.buildings.values()) if (b.done && !b.closed && B[b.type].upkeep) upkeep += B[b.type].upkeep;
   upkeep += G.busStops.size * B.busstop.upkeep;
   const services = Math.round(G.pop * ECON.services);
-  const interest = Math.round(G.loan * ECON.loanRate);
+  const interest = loanInterest();
   G.money += tickets + cafes + fares - upkeep - services - running - interest;
   Object.assign(G.today, { tourism: G.today.tourism + tickets + cafes, fares, upkeep, services, transit: running, interest });
   // moods expire
@@ -479,6 +481,7 @@ function endOfDay() {
   if (G.strikeDays >= 2) G.pending.strike = true;
   if (G.pending.protest || G.pending.strike) emit('unrestWarn', G.pending);
   updatePetition(day);
+  paperEnsure(true); // the morning paper: ads that have been up too long make way for new ones
   // debt and bankruptcy
   if (G.money < 0) {
     G.debtDays++;

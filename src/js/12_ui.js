@@ -39,7 +39,7 @@ function initUI() {
         <button id="btnSpeed" class="speed" ${tipAttr('Game speed', 'Click to switch between normal, fast and fastest.', ', / .')}><span id="speedIco">${icon('play')}</span><b id="speedLab">1×</b></button>
         <span class="ship" id="shipEta"></span>
       </div>
-      <button class="clock-menu" id="btnMenuTop" ${tipAttr('Menu', 'Save, load, finances, settings and help.', 'Esc')}>${icon('menu')}<span>Menu</span></button>
+      <button class="clock-menu" id="btnMenuTop" ${tipAttr('Menu', 'Save, load, settings and help.', 'Esc')}>${icon('menu')}<span>Menu</span></button>
     </section>
     <section class="card panel side" id="sidePanel" aria-label="Treasury and town news">
       <div class="ph money" id="moneyCard" ${tipAttr('Treasury', 'Click for the finances: income, costs, loans and taxes.', 'F')}>
@@ -50,6 +50,7 @@ function initUI() {
       <div class="pb" id="sideBody">
         <section class="talk" aria-label="Town talk"><h2>Town talk</h2><ul id="talk"></ul></section>
         <section class="goals" aria-label="Goals"><h2>Harbourmaster's notes</h2><div id="goal"></div></section>
+        <section class="jobs" id="paperJobs" hidden aria-label="Town paper jobs"><h2>Town paper jobs</h2><div id="paperJobList"></div></section>
       </div>
     </section>
   </header>
@@ -66,6 +67,10 @@ function initUI() {
         <button class="tool" data-tool="move" ${tipAttr('Move', 'Pick up a building and put it on another plot, for a quarter of its price.', 'M')}>${icon('move')}<span>Move</span></button>
         <button class="tool" data-tool="demolish" ${tipAttr('Demolish', 'Remove buildings, roads, bridges and stops for a fee. Drag over roads.', 'X')}>${icon('bulldoze')}<span>Demolish</span></button>
       </div>
+      <div class="group city">
+        <button id="btnFinance" ${tipAttr('Finances', 'Income and costs, taxes and bank loans.', 'F')}>${icon('chart')}<span>Finances</span></button>
+        <button id="btnPaper" ${tipAttr('Town paper', 'Ads that pay cash for reaching goals. Take on up to two at a time.', 'N')}>${icon('paper')}<span>Town paper</span><i class="badge-n" id="paperBadge" hidden></i></button>
+      </div>
       <div class="group view">
         <button id="btnRotate" ${tipAttr('Rotate view', 'Turn the city a quarter.', 'Q / E')}>${icon('rotate')}</button>
         <button id="btnZoomOut" ${tipAttr('Zoom out', '', '−')}>${icon('minus')}</button>
@@ -73,7 +78,6 @@ function initUI() {
         <button id="btnRanges" ${tipAttr('Ranges', 'Show the radius of every shop, park, landmark, stop and tourist centre.', 'G')}>${icon('ranges')}</button>
         <button id="btnHappy" ${tipAttr('Happiness map', 'Colour homes by how happy they are.', 'H')}>${icon('smile')}</button>
         <button id="btnTransit" ${tipAttr('Transit map', 'Show your lines and which homes have a stop within walking distance.', 'T')}>${icon('route')}</button>
-        <button id="btnMenu" ${tipAttr('Menu', 'Save, load, finances, settings and help.', 'Esc')}>${icon('menu')}</button>
       </div>
     </div>
   </nav>
@@ -102,8 +106,9 @@ function initUI() {
   $('btnRanges').addEventListener('click', uiToggleRanges);
   $('btnHappy').addEventListener('click', () => uiToggleOverlay('happy'));
   $('btnTransit').addEventListener('click', () => uiToggleOverlay('transit'));
-  $('btnMenu').addEventListener('click', () => uiOpenMenu());
-  $('moneyCard').addEventListener('click', (e) => { if (!e.target.closest('.fold')) uiOpenMenu('finance'); });
+  $('btnFinance').addEventListener('click', () => uiOpenFinance());
+  $('btnPaper').addEventListener('click', () => uiOpenPaper());
+  $('moneyCard').addEventListener('click', (e) => { if (!e.target.closest('.fold')) uiOpenFinance(); });
   initTooltips();
   bindEvents();
   uiSetSpeed(G.speed);
@@ -132,6 +137,7 @@ function bindEvents() {
   on('protest', (p) => { spawnProtest(p); uiToast(`<b>Protest in the streets</b> about ${esc(COMPLAINT_NAME[p.issue] || p.issue)}. Shops sell less today. Fix it: ${esc(FIX[p.issue] || '')}.`, 'bad', 8000); sfx('bad'); centerHint(p.x, p.y); });
   on('unrestWarn', (p) => uiToast(`${p.strike ? 'The dockers vote to strike tomorrow. ' : ''}${p.protest ? 'Residents are organising a protest for tomorrow. ' : ''}Raise happiness to stop it.`, 'bad', 7000));
   on('petition', (p) => { uiToast(`<b>Petition:</b> ${fmtNum(p.n0)} residents demand action on ${esc(COMPLAINT_NAME[p.key] || p.key)}. You have 4 days.`, 'warn', 7000); sfx('err'); });
+  on('paperDone', (j) => { uiToast(`<b>Town paper job done:</b> ${esc(adHead(j))} · +${fmtMoney(j.reward)}`, 'good', 6000); sfx('coin'); if (UI.modal === 'paper') renderPaper(); });
   on('petitionWon', (p) => { uiToast(`<b>Petition answered!</b> Residents are delighted. +${fmtMoney(p.reward)} civic grant and a happiness boost.`, 'good', 6000); sfx('coin'); });
   on('petitionLost', (p) => { uiToast(`<b>Petition ignored.</b> Residents hold a grudge: happiness down for a few days.`, 'bad', 6000); sfx('bad'); });
   on('storeWarn', (s) => uiToast(`${B[s.type].name} has too few customers and full shelves. It closes in 2 days unless more homes are in its radius.`, 'warn', 6500));
@@ -158,6 +164,7 @@ function centerHint(x, y) { UI.hint = { x, y, t: performance.now() }; }
 // ---- HUD -----------------------------------------------------------------------------------------
 function refreshHUD() {
   const m = G.minute();
+  paperHud();
   $('dayNum').textContent = G.day();
   $('clockTime').textContent = fmtTime(m);
   const w = G.weather, f = G.forecast;
@@ -174,7 +181,7 @@ function refreshHUD() {
   if (G.money < 0) sub = `<span class="neg">In debt · ${ECON.bankruptDays - G.debtDays} days to bankruptcy</span>`;
   else if (last) sub = `Yesterday <b class="${last.income - last.expenses >= 0 ? 'pos' : 'neg'}">${last.income - last.expenses >= 0 ? '+' : ''}${fmtMoney(last.income - last.expenses)}</b>`;
   else sub = 'First ship docks at 08:00';
-  if (G.loan) sub += ` · loan ${fmtMoney(G.loan)}`;
+  if (G.loans.length) sub += ` · owes ${fmtMoney(loanOwed())}`;
   if (UI.moneySub !== sub) { UI.moneySub = sub; $('moneySub').innerHTML = sub; }
   const lv = G.level, nx = LEVELS[lv + 1];
   $('lvlName').textContent = LEVELS[lv].name;
@@ -237,7 +244,7 @@ function refreshPetition() {
 }
 
 // ---- speed, tools, drawer ------------------------------------------------------------------------------
-const SPEED_UI = [null, ['play', '1×', 'Normal speed', 'A day lasts about a minute.'], ['fast', '2×', 'Fast', 'Twice as fast.'], ['faster', '4×', 'Fastest', 'Four times as fast.']];
+const SPEED_UI = [null, ['play', '1×', 'Normal speed', 'A day lasts about a minute and a half.'], ['fast', '2×', 'Fast', 'Twice as fast.'], ['faster', '4×', 'Fastest', 'Four times as fast.']];
 function uiSetSpeed(i) {
   G.speed = i; if (i) IN.lastSpeed = i;
   const pb = $('btnPause'), sb = $('btnSpeed');
@@ -548,13 +555,13 @@ function renderTileInfo(b, el) {
 // ---- goals --------------------------------------------------------------------------------------------
 const has = (t, f) => [...G.buildings.values()].some((b) => b.type === t && (!f || f(b)));
 const GOALS = [
-  { id: 'house', text: 'Build a Cottage beside the road', hint: 'Open Homes (1). A home needs people on the moving list.', done: () => has('cottage'), reward: 300 },
-  { id: 'park', text: 'Build a Pocket Park near your homes', hint: 'Parks lift happiness in a radius. Watch the ring when placing it.', done: () => has('park'), reward: 200 },
-  { id: 'tunnel', text: 'Connect a road from the harbour to the road tunnel', hint: `The tunnel adds ${TUNNEL_TRUCKS} delivery trucks every morning.`, done: () => G.links.road, reward: 600, show: () => [G.map.roadPortal.x + 0.5, G.map.roadPortal.y + 1.5] },
-  { id: 'village', text: 'Grow to 60 residents', hint: 'Keep happiness above 55% so the moving list grows.', done: () => G.pop >= 60, reward: 800 },
-  { id: 'busline', text: 'Create a bus line with two stops', hint: 'Place bus stops on roads, then New Bus Line in Transport (6) and click the stops.', done: () => [...G.lines.values()].some((l) => l.kind === 'bus' && l.valid), reward: 700 },
-  { id: 'clothes', text: 'Open a Boutique', hint: 'From 60 residents people want clothes too.', done: () => has('boutique') || has('fashion') || has('dept'), reward: 600 },
-  { id: 'town', text: 'Grow to 180 residents', hint: 'Tourism, rail and pools unlock at Town.', done: () => G.pop >= 180, reward: 1500 },
+  { id: 'house', text: 'Build a Cottage beside the road', hint: 'Open Homes (1). A home needs people on the moving list.', done: () => has('cottage'), reward: 150 },
+  { id: 'park', text: 'Build a Pocket Park near your homes', hint: 'Parks lift happiness in a radius. Watch the ring when placing it.', done: () => has('park'), reward: 150 },
+  { id: 'tunnel', text: 'Connect a road from the harbour to the road tunnel', hint: `The tunnel adds ${TUNNEL_TRUCKS} delivery trucks every morning.`, done: () => G.links.road, reward: 400, show: () => [G.map.roadPortal.x + 0.5, G.map.roadPortal.y + 1.5] },
+  { id: 'village', text: 'Grow to 60 residents', hint: 'Keep happiness above 55% so the moving list grows.', done: () => G.pop >= 60, reward: 500 },
+  { id: 'busline', text: 'Create a bus line with two stops', hint: 'Place bus stops on roads, then New Bus Line in Transport (6) and click the stops.', done: () => [...G.lines.values()].some((l) => l.kind === 'bus' && l.valid), reward: 400 },
+  { id: 'clothes', text: 'Open a Boutique', hint: 'From 60 residents people want clothes too.', done: () => has('boutique') || has('fashion') || has('dept'), reward: 400 },
+  { id: 'town', text: 'Grow to 180 residents', hint: 'Tourism, rail and pools unlock at Town.', done: () => G.pop >= 180, reward: 1000 },
   { id: 'tourist', text: 'Build a Tourist Centre and an intercity coach route', hint: 'The route runs from the road tunnel to a bus stop inside the centre\'s radius.', done: () => [...G.lines.values()].some((l) => LINE_KIND[l.kind].outside && l.tourOk), reward: 3000 },
   { id: 'hotel', text: 'Build a Guest House for overnight visitors', hint: 'Without beds, tourists go home in the evening.', done: () => has('guesthouse') || has('hotel'), reward: 2000 },
   { id: 'terrace', text: 'Raise a plot and build a home on it', hint: 'Terrain (7): raise land, then drag a road up with a ramp. Raised homes see the sea.', done: () => [...G.buildings.values()].some((b) => HOUSING.has(b.type) && tileLevel(b.x, b.y) > 0), reward: 1500 },

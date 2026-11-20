@@ -29,7 +29,7 @@ const BF = ['id', 'type', 'x', 'y', 'lv', 'v', 'facing', 'done', 'doneAt', 'res'
 const round2 = (o) => { const r = {}; for (const k in o || {}) r[k] = Math.round(o[k] * 100) / 100; return r; };
 function serialize() {
   return {
-    v: SAVE_VERSION, mapV: G.mapV, seed: G.seed, name: G.name, t: G.t, money: Math.round(G.money), loan: G.loan, debtDays: G.debtDays, tax: G.tax,
+    v: SAVE_VERSION, mapV: G.mapV, seed: G.seed, name: G.name, t: G.t, money: Math.round(G.money), loans: G.loans, paper: G.paper, debtDays: G.debtDays, tax: G.tax,
     movingList: G.movingList, level: G.level, weather: G.weather, forecast: G.forecast,
     history: G.history.slice(-20), goals: G.goals, stats: G.stats, moods: G.moods, f1: G.f1, petition: G.petition, lastPetition: G.lastPetition,
     unrestDays: G.unrestDays, strikeDays: G.strikeDays, pending: G.pending, tourists: G.tourists,
@@ -139,7 +139,10 @@ function loadGame(s) {
   G.lines = new Map((s.lines || []).map((l) => [l.id, Object.assign({ riders: 0, demand: 0 }, l)]));
   G.circuit = s.circuit || null;
   Object.assign(G, {
-    t: s.t, money: s.money, loan: s.loan || 0, debtDays: s.debtDays || 0, tax: s.tax || 'normal', movingList: s.movingList, level: s.level,
+    t: s.t, money: s.money, debtDays: s.debtDays || 0,
+    // loans; a save from before the loan rework carries one plain loan at the old rate
+    paper: s.paper ? JSON.parse(JSON.stringify(s.paper)) : null,
+    loans: (s.loans || (s.loan > 0 ? [{ id: 'legacy', owed: s.loan, rate: ECON.loanRate, day: 0 }] : [])).map((l) => Object.assign({}, l)), tax: s.tax || 'normal', movingList: s.movingList, level: s.level,
     weather: s.weather, forecast: s.forecast, history: s.history || [], goals: s.goals || {}, stats: s.stats || { built: 0, races: 0 },
     moods: s.moods || [], f1: s.f1 || null, petition: s.petition || null, lastPetition: s.lastPetition || 0, unrestDays: s.unrestDays || 0,
     strikeDays: s.strikeDays || 0, pending: s.pending || null, tourists: Object.assign({ day: 0, guests: 0, cap: 0, beds: 0, potential: 0, turnedAway: 0 }, s.tourists || {}),
@@ -170,7 +173,7 @@ function boot() {
   document.addEventListener('visibilitychange', () => { if (document.hidden) saveGame('auto'); });
   initCloud();
   try { window.claude && window.claude.hot && window.claude.hot.snapshot && window.claude.hot.snapshot(() => (G.started ? serialize() : {})); } catch (e) { /* not in the viewer */ }
-  window.__PA = { G, R, B, NET, AG, IN, SAVES, renderBackdrop, BD, GOALS, addBuilding, newGame, placeBuilding, placeDrag, planDrag, linePath, setView, centerOnTile, advance, recomputeAll, render, canPlace, upgrade, demolish, startNewCity, loadGame, serialize, saveGame, closeTitle, setTool, rotateView, zoomAt, updateHover, terra, canTerra, buildSpan, planSpan, createLine, buyLicence, buildCircuit, lineVehicles, borrow, repay, finishDraft, uiOpenMenu, uiCloseModal, emit, select, updateOverlay, uiOpenDrawer, uiCloseDrawer, uiToggleRanges, uiToggleOverlay, uiToast, tileToScreen: (x, y) => worldPxToScreen(...(() => { const [X, Y] = toPx(x + 0.5, y + 0.5); return [X, Y - surfaceZ(x + 0.5, y + 0.5)]; })()) };
+  window.__PA = { G, R, B, NET, AG, IN, SAVES, renderBackdrop, BD, GOALS, addBuilding, newGame, placeBuilding, placeDrag, planDrag, linePath, setView, centerOnTile, advance, recomputeAll, render, canPlace, upgrade, demolish, startNewCity, loadGame, serialize, saveGame, closeTitle, setTool, rotateView, zoomAt, updateHover, terra, canTerra, buildSpan, planSpan, createLine, buyLicence, buildCircuit, lineVehicles, MODEL_FN, renderModel, takeLoan, repayLoan, takeAd, dropJob, paperEnsure, uiOpenPaper, uiOpenFinance, finishDraft, uiOpenMenu, uiCloseModal, emit, select, updateOverlay, uiOpenDrawer, uiCloseDrawer, uiToggleRanges, uiToggleOverlay, uiToast, tileToScreen: (x, y) => worldPxToScreen(...(() => { const [X, Y] = toPx(x + 0.5, y + 0.5); return [X, Y - surfaceZ(x + 0.5, y + 0.5)]; })()) };
   window.__PA_READY = true;
   requestAnimationFrame(frame);
 }
