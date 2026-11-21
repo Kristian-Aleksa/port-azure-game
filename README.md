@@ -15,49 +15,6 @@ An isometric pixel-art city builder for the browser. Build a harbour city on a M
 
 The whole game is plain HTML, CSS and JavaScript with no frameworks and no dependencies. A small build script bundles it into one self-contained page.
 
-## Run it on your computer
-
-You need [Node.js](https://nodejs.org) 18 or newer.
-
-1. Open a terminal in this folder.
-2. Run `npm run preview`.
-3. Open http://localhost:5173 in your browser.
-
-`npm run build` only builds the game into `dist/index.html`. You can also open that file directly in a browser.
-
-## Put it on GitHub
-
-**Option A: in the browser (no tools needed)**
-
-1. Go to https://github.com/new, name the repository (for example `port-azur`) and click **Create repository**. Don't add a README, .gitignore or license there, because this folder already has its own.
-2. On the empty repository page, click **uploading an existing file**.
-3. Drag everything inside this folder onto the page: `src`, `tools`, `docs`, `build.mjs`, `package.json`, `vercel.json`, `README.md` and `.gitignore`.
-   `.gitignore` is hidden by default. On a Mac, press `Cmd + Shift + .` in Finder to show hidden files. On Windows, tick **View → Hidden items** in File Explorer.
-4. Click **Commit changes**.
-
-**Option B: from the command line**
-
-```bash
-cd port-azur
-git init
-git add .
-git commit -m "Port Azur"
-git branch -M main
-git remote add origin https://github.com/YOUR-USERNAME/port-azur.git
-git push -u origin main
-```
-
-GitHub Desktop works too. Choose **File → Add local repository** and pick this folder. It offers to create a repository there. Accept, make the first commit, then click **Publish repository**.
-
-## Deploy it on Vercel
-
-1. Sign in at https://vercel.com with your GitHub account.
-2. Click **Add New… → Project** and import the `port-azur` repository.
-3. Leave the settings as they are. `vercel.json` already tells Vercel what to do: Framework Preset **Other**, build command `npm run build`, output folder `dist`.
-4. Click **Deploy**. After about a minute you get a public address like `port-azur.vercel.app`.
-
-From then on, every change you push to GitHub redeploys the site automatically.
-
 ## Analytics
 
 The page includes Vercel Web Analytics (two small script tags at the end of the `<head>` in `src/index.html`). It counts visitors and page views on the deployed site. To see the numbers:
